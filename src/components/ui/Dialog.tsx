@@ -9,6 +9,7 @@ interface DialogProps {
 }
 
 export function Dialog({ title, children, onClose }: DialogProps) {
+  // Close on escape key
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -32,7 +33,10 @@ export function Dialog({ title, children, onClose }: DialogProps) {
         aria-labelledby="dialog-title"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 id="dialog-title" className="text-sm font-semibold text-foreground">
+          <h2
+            id="dialog-title"
+            className="text-sm font-semibold text-foreground"
+          >
             {title}
           </h2>
           <button

@@ -4,6 +4,57 @@ type FixLyricsPayload = {
   lyrics: string;
 };
 
+/**
+ * Extract clean lyrics from AI response, handling various formats:
+ * - Plain text lyrics
+ * - JSON wrapped lyrics
+ * - Multiple levels of JSON nesting
+ */
+function extractCleanLyrics(content: string, fallback: string): string {
+  let result = content.trim();
+  
+  // Try to extract from JSON up to 3 levels deep (AI sometimes double/triple wraps)
+  for (let i = 0; i < 3; i++) {
+    // Check if it looks like JSON
+    if (!result.startsWith("{") && !result.startsWith("```")) {
+      break; // It's plain text, we're done
+    }
+    
+    // Remove markdown code blocks if present
+    if (result.startsWith("```")) {
+      result = result.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    }
+    
+    // Try to parse as JSON
+    try {
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) break;
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (typeof parsed.cleanedLyrics === "string") {
+        result = parsed.cleanedLyrics;
+      } else if (typeof parsed === "string") {
+        result = parsed;
+      } else {
+        break; // Can't extract further
+      }
+    } catch {
+      break; // Not valid JSON, use as-is
+    }
+  }
+  
+  // Final cleanup
+  result = result.trim();
+  
+  // If we still have JSON-looking content, something went wrong - use fallback
+  if (result.startsWith("{") && result.includes("cleanedLyrics")) {
+    console.error("Failed to extract lyrics from JSON:", result.slice(0, 100));
+    return fallback;
+  }
+  
+  return result || fallback;
+}
+
 export async function POST(request: Request) {
   const body = (await request.json()) as FixLyricsPayload;
   if (!body?.lyrics?.trim()) {
@@ -29,24 +80,40 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5.2",
+        model: "openai/gpt-4o-mini",
         messages: [
           {
             role: "system",
             content: [
-              "You are a worship lyric editor.",
-              "Correct spelling, fix casing for deity references (God vs god),",
-              "remove non-lyrical metadata, and keep bracketed section labels",
-              "like [Verse 1] or [Chorus]. If line breaks separate verses, keep them.",
-              "Normalize spacing: collapse multiple spaces into one, trim lines.",
-              "Remove filler symbols like ...., --- or decorative punctuation.",
-              "Only allow brackets for section labels or translations like [Yoruba].",
-              "You MUST respond with valid JSON only: {\"cleanedLyrics\": \"...\", \"notes\": \"...\"}",
+              "You are a worship lyric editor. Your job is to clean up lyrics.",
+              "",
+              "CAPITALIZATION RULES (VERY IMPORTANT):",
+              "- Capitalize pronouns ONLY when referring to God: You, Your, He, Him, His",
+              "- Use lowercase when referring to humans: you, your, he, him, his",
+              "- Understand context: 'He'll never walk out on you' = lowercase 'you' (human)",
+              "- But: 'Lord, I worship You' = capital 'You' (God)",
+              "- Deity names always capitalized: God, Lord, Jesus, Christ, Father, Holy Spirit",
+              "- Titles for God capitalized: King, Savior, Redeemer, Almighty",
+              "- Same words for humans lowercase: 'the king of the land' vs 'Jesus is my King'",
+              "",
+              "OTHER RULES:",
+              "- Correct spelling mistakes",
+              "- Keep ALL bracketed section labels like [Verse 1], [Chorus], [Bridge]",
+              "- Keep ALL line breaks exactly as they appear",
+              "- Normalize spacing: collapse multiple spaces into one",
+              "- Remove filler symbols like ...., --- or decorative punctuation",
+              "",
+              "CRITICAL - DO NOT SKIP CONTENT:",
+              "- Output EVERY SINGLE LINE from the input",
+              "- Keep ALL repetitions - if a line repeats 5 times, output it 5 times",
+              "- Do NOT summarize or remove repeated verses/choruses",
+              "- Return plain text only, no JSON, no markdown",
             ].join("\n"),
           },
-          { role: "user", content: body.lyrics },
+          { role: "user", content: `Clean these worship lyrics. Understand context for capitalization (God vs human references). Return ALL lines:\n\n${body.lyrics}` },
         ],
         temperature: 0.2,
+        max_tokens: 16000, // Large limit to ensure full lyrics are returned
       }),
     });
 
@@ -63,10 +130,21 @@ export async function POST(request: Request) {
     }
 
     const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ 
+        message?: { content?: string };
+        finish_reason?: string;
+      }>;
     };
     
-    const content = data.choices?.[0]?.message?.content;
+    const choice = data.choices?.[0];
+    const content = choice?.message?.content;
+    const finishReason = choice?.finish_reason;
+    
+    // Log for debugging
+    console.log("AI Response - finish_reason:", finishReason);
+    console.log("AI Response - content length:", content?.length ?? 0);
+    console.log("Input lyrics length:", body.lyrics.length);
+    
     if (!content) {
       return NextResponse.json(
         { cleanedLyrics: body.lyrics, notes: "AI Gateway returned no content." },
@@ -74,46 +152,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // Try to extract JSON from the response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      // No JSON found - return content as-is (it's already the cleaned lyrics)
-      return NextResponse.json({
-        cleanedLyrics: content.trim(),
-        notes: undefined,
+    // If truncated due to length, return original lyrics with warning
+    if (finishReason === "length") {
+      console.warn("AI response was truncated due to max_tokens limit");
+      const cleanedLyrics = extractCleanLyrics(content, body.lyrics);
+      return NextResponse.json({ 
+        cleanedLyrics,
+        notes: "Response may be incomplete - lyrics were very long"
+      });
+    }
+    
+    // If content filter triggered, return original lyrics
+    if (finishReason === "content-filter" || finishReason === "content_filter") {
+      console.warn("AI content filter was triggered - returning original lyrics");
+      // Return original lyrics since the AI couldn't complete properly
+      return NextResponse.json({ 
+        cleanedLyrics: body.lyrics,
+        notes: "Content filter triggered - lyrics returned unchanged"
       });
     }
 
-    try {
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        cleanedLyrics?: string;
-        notes?: string;
-      };
-      
-      // Handle case where cleanedLyrics might itself be a JSON string
-      let cleanedLyrics = parsed.cleanedLyrics ?? body.lyrics;
-      if (typeof cleanedLyrics === 'string' && cleanedLyrics.startsWith('{')) {
-        try {
-          const innerParsed = JSON.parse(cleanedLyrics);
-          if (innerParsed.cleanedLyrics) {
-            cleanedLyrics = innerParsed.cleanedLyrics;
-          }
-        } catch {
-          // Not nested JSON, use as-is
-        }
-      }
-      
-      return NextResponse.json({
-        cleanedLyrics,
-        notes: parsed.notes,
-      });
-    } catch {
-      // JSON parsing failed - return content as cleaned lyrics
-      return NextResponse.json({
-        cleanedLyrics: content.trim(),
-        notes: undefined,
-      });
-    }
+    // Extract clean lyrics, handling any JSON wrapping the AI might add
+    const cleanedLyrics = extractCleanLyrics(content, body.lyrics);
+    
+    console.log("Cleaned lyrics length:", cleanedLyrics.length);
+    
+    return NextResponse.json({ cleanedLyrics });
   } catch (error) {
     const message =
       error instanceof Error
