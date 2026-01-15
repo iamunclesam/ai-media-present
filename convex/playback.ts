@@ -49,3 +49,41 @@ export const setActiveSlide = mutation({
     return playbackId;
   },
 });
+
+export const setFontStyle = mutation({
+  args: {
+    orgId: v.id("organizations"),
+    fontFamily: v.optional(v.string()),
+    fontSize: v.optional(v.number()),
+    fontBold: v.optional(v.boolean()),
+    fontItalic: v.optional(v.boolean()),
+    fontUnderline: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("playbackState")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+
+    const now = Date.now();
+    const updates: Record<string, unknown> = { updatedAt: now };
+    if (args.fontFamily !== undefined) updates.fontFamily = args.fontFamily;
+    if (args.fontSize !== undefined) updates.fontSize = args.fontSize;
+    if (args.fontBold !== undefined) updates.fontBold = args.fontBold;
+    if (args.fontItalic !== undefined) updates.fontItalic = args.fontItalic;
+    if (args.fontUnderline !== undefined) updates.fontUnderline = args.fontUnderline;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, updates);
+      return existing._id;
+    }
+
+    const playbackId = await ctx.db.insert("playbackState", {
+      orgId: args.orgId,
+      isBlackedOut: false,
+      ...updates,
+      updatedAt: now,
+    });
+    return playbackId;
+  },
+});

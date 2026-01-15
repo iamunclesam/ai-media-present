@@ -73,6 +73,12 @@ export default defineSchema({
     activeSlideId: v.optional(v.string()),
     activeBackgroundId: v.optional(v.string()),
     isBlackedOut: v.boolean(),
+    // Font styling for output
+    fontFamily: v.optional(v.string()),
+    fontSize: v.optional(v.number()), // in pixels
+    fontBold: v.optional(v.boolean()),
+    fontItalic: v.optional(v.boolean()),
+    fontUnderline: v.optional(v.boolean()),
     updatedAt: v.number(),
   }).index("by_org", ["orgId"]),
 });

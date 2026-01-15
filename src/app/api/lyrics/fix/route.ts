@@ -77,21 +77,43 @@ export async function POST(request: Request) {
     // Try to extract JSON from the response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      // No JSON found - return content as-is (it's already the cleaned lyrics)
       return NextResponse.json({
         cleanedLyrics: content.trim(),
         notes: undefined,
       });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      cleanedLyrics?: string;
-      notes?: string;
-    };
-    
-    return NextResponse.json({
-      cleanedLyrics: parsed.cleanedLyrics ?? body.lyrics,
-      notes: parsed.notes,
-    });
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        cleanedLyrics?: string;
+        notes?: string;
+      };
+      
+      // Handle case where cleanedLyrics might itself be a JSON string
+      let cleanedLyrics = parsed.cleanedLyrics ?? body.lyrics;
+      if (typeof cleanedLyrics === 'string' && cleanedLyrics.startsWith('{')) {
+        try {
+          const innerParsed = JSON.parse(cleanedLyrics);
+          if (innerParsed.cleanedLyrics) {
+            cleanedLyrics = innerParsed.cleanedLyrics;
+          }
+        } catch {
+          // Not nested JSON, use as-is
+        }
+      }
+      
+      return NextResponse.json({
+        cleanedLyrics,
+        notes: parsed.notes,
+      });
+    } catch {
+      // JSON parsing failed - return content as cleaned lyrics
+      return NextResponse.json({
+        cleanedLyrics: content.trim(),
+        notes: undefined,
+      });
+    }
   } catch (error) {
     const message =
       error instanceof Error
