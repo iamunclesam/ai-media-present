@@ -3,10 +3,15 @@
 import { memo } from "react";
 import type { Id } from "@/../convex/_generated/dataModel";
 import type { Song } from "@/types";
-import { formatSlideLabel, stripBracketsForDisplay } from "@/lib/lyrics";
+import { stripBracketsForDisplay } from "@/lib/lyrics";
 import { getLabelColor } from "@/types";
 import { cn } from "@/lib/utils";
 import { AutoFitText } from "@/components/ui/AutoFitText";
+
+// Fixed slide box height
+const SLIDE_HEIGHT = 160;
+// Minimum width for each slide (controls when columns reduce)
+const MIN_SLIDE_WIDTH = 220;
 
 interface SlideData {
   song: Song;
@@ -41,7 +46,12 @@ export const SlidesGrid = memo(function SlidesGrid({
   }
 
   return (
-    <div className="grid grid-cols-6 gap-4 pb-4">
+    <div
+      className="grid gap-4 pb-4"
+      style={{
+        gridTemplateColumns: `repeat(auto-fill, minmax(${MIN_SLIDE_WIDTH}px, 1fr))`,
+      }}
+    >
       {slides.map(({ song, slide, index }) => {
         const slideId = `${song._id}:${index}`;
         const isActive = activeSlideId === slideId;
@@ -85,8 +95,9 @@ const SlideCard = memo(function SlideCard({
     <button
       type="button"
       onClick={onClick}
+      style={{ height: SLIDE_HEIGHT }}
       className={cn(
-        "group relative flex h-36 flex-col overflow-hidden rounded-lg border text-left transition",
+        "group relative flex w-full flex-col overflow-hidden rounded-lg border text-left transition",
         isActive
           ? "border-primary ring-2 ring-primary"
           : isSelected
@@ -103,14 +114,16 @@ const SlideCard = memo(function SlideCard({
         />
       </div>
 
-      {/* Label bar */}
+      {/* Label bar: number left, label center, modifier right */}
       <div
         className={cn(
           "flex shrink-0 items-center justify-between px-3 py-1.5 text-xs font-medium",
           getLabelColor(slide.label)
         )}
       >
-        {formatSlideLabel(index, slide.label, slide.modifier)}
+        <span>{index + 1}</span>
+        <span>{slide.label || ""}</span>
+        <span>{slide.modifier || ""}</span>
       </div>
     </button>
   );

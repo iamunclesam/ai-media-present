@@ -71,7 +71,7 @@ export const ServicesSidebar = memo(function ServicesSidebar({
   };
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-card">
+    <aside className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2 flex items-center justify-between">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           {isInsideService && selectedService ? selectedService.name : "Services"}

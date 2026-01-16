@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils";
 import { AutoFitText } from "@/components/ui/AutoFitText";
 import { stripBracketsForDisplay } from "@/lib/lyrics";
 
+// Fixed output preview dimensions (16:9 aspect ratio)
+const OUTPUT_WIDTH = 240;
+const OUTPUT_HEIGHT = 135;
+
 interface SlideGroup {
   label: string;
   count: number;
@@ -40,28 +44,33 @@ export const OutputPreview = memo(function OutputPreview({
         <p className="text-xs font-medium text-muted-foreground">Main Output</p>
       </div>
 
-      {/* Preview box - fixed height with auto-fit text */}
-      <div className="mx-3 h-36 overflow-hidden rounded-lg bg-black p-2">
-        {text ? (
-          <AutoFitText
-            text={stripBracketsForDisplay(text)}
-            className={cn(
-              "leading-relaxed text-white",
-              fontBold && "font-bold",
-              fontItalic && "italic",
-              fontUnderline && "underline"
-            )}
-            style={{
-              fontFamily,
-              fontSize: `${previewFontSize}px`,
-            }}
-            minScale={0.4}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-xs text-zinc-600">No slide selected</p>
-          </div>
-        )}
+      {/* Preview box - fixed size rectangle (16:9) */}
+      <div className="flex justify-center px-3">
+        <div
+          style={{ width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT }}
+          className="shrink-0 overflow-hidden rounded-lg bg-black p-2"
+        >
+          {text ? (
+            <AutoFitText
+              text={stripBracketsForDisplay(text)}
+              className={cn(
+                "leading-relaxed text-white",
+                fontBold && "font-bold",
+                fontItalic && "italic",
+                fontUnderline && "underline"
+              )}
+              style={{
+                fontFamily,
+                fontSize: `${previewFontSize}px`,
+              }}
+              minScale={0.4}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-xs text-zinc-600">No slide selected</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Groups section */}

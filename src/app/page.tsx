@@ -15,6 +15,13 @@ import {
 // Types
 import type { ViewMode, BottomTab } from "@/types";
 
+// UI Components
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui";
+
 // Features
 import { AppHeader } from "@/features/header";
 import { ServicesSidebar } from "@/features/services";
@@ -234,120 +241,152 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      {/* Header */}
+      {/* Header - Fixed, not resizable */}
       <AppHeader viewMode={viewMode} onViewModeChange={setViewMode} />
 
-      <div className="flex min-h-0 flex-1">
-        {/* Left sidebar - Services */}
-        <ServicesSidebar
-          services={services}
-          selectedServiceId={selectedServiceId}
-          isInsideService={isInsideService}
-          selectedService={selectedService}
-          serviceItems={serviceItems}
-          serviceItemIndex={serviceItemIndex}
-          onEnterService={enterService}
-          onExitService={exitService}
-          onSelectServiceItem={handleSelectServiceItem}
-          onRemoveFromService={handleRemoveFromService}
-          onCreateService={createNewService}
-          onRenameService={renameExistingService}
-          onDeleteService={deleteService}
-        />
+      {/* Main resizable layout - autoSaveId persists sizes to localStorage */}
+      <ResizablePanelGroup
+        direction="horizontal"
+        className="flex-1"
+        autoSaveId="present-main-layout"
+      >
+        {/* Left sidebar - Services (default ~200px on 1400px screen = 14%) */}
+        <ResizablePanel defaultSize={14} minSize={10} maxSize={25}>
+          <div className="h-full border-r border-border bg-card">
+            <ServicesSidebar
+              services={services}
+              selectedServiceId={selectedServiceId}
+              isInsideService={isInsideService}
+              selectedService={selectedService}
+              serviceItems={serviceItems}
+              serviceItemIndex={serviceItemIndex}
+              onEnterService={enterService}
+              onExitService={exitService}
+              onSelectServiceItem={handleSelectServiceItem}
+              onRemoveFromService={handleRemoveFromService}
+              onCreateService={createNewService}
+              onRenameService={renameExistingService}
+              onDeleteService={deleteService}
+            />
+          </div>
+        </ResizablePanel>
 
-        {/* Center content */}
-        <main className="flex min-w-0 flex-1 flex-col bg-background">
-          <div className="flex-1 overflow-auto p-4">
-            {viewMode === "show" ? (
-              <SlidesGrid
-                slides={slidesForGrid}
-                activeSlideId={activeSlideId}
-                selectedIndex={selected?.index ?? null}
-                onSelectSlide={handleSelectSlide}
-              />
-            ) : selectedSong ? (
-              <LyricsEditor
-                song={selectedSong}
-                fontFamily={fontFamily}
-                fontSize={fontSize}
-                fontBold={fontBold}
-                fontItalic={fontItalic}
-                fontUnderline={fontUnderline}
-                onSave={handleSaveSong}
-                onFixLyrics={fixLyrics}
-                onFontStyleChange={updateFontStyle}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Select a song to edit
+        <ResizableHandle withHandle />
+
+        {/* Center content with vertical split (slides + bottom tabs) */}
+        <ResizablePanel defaultSize={66} minSize={30}>
+          <ResizablePanelGroup
+            direction="vertical"
+            className="h-full"
+            autoSaveId="present-center-layout"
+          >
+            {/* Main slides/editor area */}
+            <ResizablePanel defaultSize={75} minSize={30}>
+              <main className="flex h-full flex-col overflow-hidden bg-background">
+                <div className="flex-1 overflow-auto p-4">
+                  {viewMode === "show" ? (
+                    <SlidesGrid
+                      slides={slidesForGrid}
+                      activeSlideId={activeSlideId}
+                      selectedIndex={selected?.index ?? null}
+                      onSelectSlide={handleSelectSlide}
+                    />
+                  ) : selectedSong ? (
+                    <LyricsEditor
+                      song={selectedSong}
+                      fontFamily={fontFamily}
+                      fontSize={fontSize}
+                      fontBold={fontBold}
+                      fontItalic={fontItalic}
+                      fontUnderline={fontUnderline}
+                      onSave={handleSaveSong}
+                      onFixLyrics={fixLyrics}
+                      onFontStyleChange={updateFontStyle}
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Select a song to edit
+                    </div>
+                  )}
+                </div>
+              </main>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle />
+
+            {/* Bottom tabs panel (default ~200px = 25% of remaining height) */}
+            <ResizablePanel defaultSize={25} minSize={15} maxSize={50}>
+              <div className="flex h-full flex-col border-t border-border bg-card">
+                <div className="flex shrink-0 items-center border-b border-border px-2">
+                  {(["shows", "media", "scripture"] as BottomTab[]).map(
+                    (tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setBottomTab(tab)}
+                        className={`flex items-center gap-2 px-4 py-2 text-xs font-medium capitalize transition ${
+                          bottomTab === tab
+                            ? "border-b-2 border-primary text-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    )
+                  )}
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {bottomTab === "shows" && (
+                    <ShowsPanel
+                      songs={filteredSongs}
+                      categories={categories}
+                      selectedSongId={selectedSongId}
+                      selectedCategoryId={selectedCategoryId}
+                      isInsideService={isInsideService}
+                      selectedServiceId={selectedServiceId}
+                      onSelectSong={setSelectedSongId}
+                      onSelectCategory={setSelectedCategoryId}
+                      onCreateSong={createNewSong}
+                      onRenameSong={handleRenameSong}
+                      onDeleteSong={deleteSong}
+                      onAddToService={handleAddToService}
+                      onCreateCategory={createNewCategory}
+                      onFixLyrics={fixLyrics}
+                    />
+                  )}
+                  {bottomTab === "media" && (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Media library coming soon
+                    </div>
+                  )}
+                  {bottomTab === "scripture" && (
+                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                      Scripture search coming soon
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
 
-          {/* Bottom tabs */}
-          <div className="shrink-0 border-t border-border bg-card">
-            <div className="flex items-center border-b border-border px-2">
-              {(["shows", "media", "scripture"] as BottomTab[]).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setBottomTab(tab)}
-                  className={`flex items-center gap-2 px-4 py-2 text-xs font-medium capitalize transition ${
-                    bottomTab === tab
-                      ? "border-b-2 border-primary text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            <div className="h-44">
-              {bottomTab === "shows" && (
-                <ShowsPanel
-                  songs={filteredSongs}
-                  categories={categories}
-                  selectedSongId={selectedSongId}
-                  selectedCategoryId={selectedCategoryId}
-                  isInsideService={isInsideService}
-                  selectedServiceId={selectedServiceId}
-                  onSelectSong={setSelectedSongId}
-                  onSelectCategory={setSelectedCategoryId}
-                  onCreateSong={createNewSong}
-                  onRenameSong={handleRenameSong}
-                  onDeleteSong={deleteSong}
-                  onAddToService={handleAddToService}
-                  onCreateCategory={createNewCategory}
-                  onFixLyrics={fixLyrics}
-                />
-              )}
-              {bottomTab === "media" && (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Media library coming soon
-                </div>
-              )}
-              {bottomTab === "scripture" && (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Scripture search coming soon
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
+        <ResizableHandle withHandle />
 
-        {/* Right sidebar - Output Preview + Groups */}
-        <aside className="w-72 shrink-0 border-l border-border bg-card">
-          <OutputPreview
-            text={activeSlideText}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            fontBold={fontBold}
-            fontItalic={fontItalic}
-            fontUnderline={fontUnderline}
-            groups={slideGroups}
-          />
-        </aside>
-      </div>
+        {/* Right sidebar - Output Preview + Groups (default ~280px on 1400px screen = 20%) */}
+        <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>
+          <div className="h-full border-l border-border bg-card">
+            <OutputPreview
+              text={activeSlideText}
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              fontBold={fontBold}
+              fontItalic={fontItalic}
+              fontUnderline={fontUnderline}
+              groups={slideGroups}
+            />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
