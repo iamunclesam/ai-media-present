@@ -1,5 +1,6 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 
 export const listByOrg = query({
   args: { orgId: v.id("organizations") },
@@ -31,7 +32,10 @@ export const create = mutation({
       .query("services")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
       .collect();
-    const maxOrder = existing.reduce((max, s) => Math.max(max, s.order ?? 0), 0);
+    const maxOrder = existing.reduce(
+      (max, s) => Math.max(max, s.order ?? 0),
+      0
+    );
     return await ctx.db.insert("services", {
       orgId: args.orgId,
       name: args.name,
@@ -46,14 +50,23 @@ export const create = mutation({
 export const addItem = mutation({
   args: {
     serviceId: v.id("services"),
-    type: v.union(v.literal("song"), v.literal("media"), v.literal("scripture")),
+    type: v.union(
+      v.literal("song"),
+      v.literal("media"),
+      v.literal("scripture")
+    ),
     refId: v.string(),
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const service = await ctx.db.get(args.serviceId);
     if (!service) throw new Error("Service not found");
-    const newItem = { type: args.type, refId: args.refId, label: args.label, addedAt: Date.now() };
+    const newItem = {
+      type: args.type,
+      refId: args.refId,
+      label: args.label,
+      addedAt: Date.now(),
+    };
     await ctx.db.patch(args.serviceId, { items: [...service.items, newItem] });
     return args.serviceId;
   },
@@ -72,7 +85,11 @@ export const removeItem = mutation({
 });
 
 export const reorderItems = mutation({
-  args: { serviceId: v.id("services"), fromIndex: v.number(), toIndex: v.number() },
+  args: {
+    serviceId: v.id("services"),
+    fromIndex: v.number(),
+    toIndex: v.number(),
+  },
   handler: async (ctx, args) => {
     const service = await ctx.db.get(args.serviceId);
     if (!service) throw new Error("Service not found");
@@ -85,7 +102,11 @@ export const reorderItems = mutation({
 });
 
 export const update = mutation({
-  args: { serviceId: v.id("services"), name: v.optional(v.string()), date: v.optional(v.string()) },
+  args: {
+    serviceId: v.id("services"),
+    name: v.optional(v.string()),
+    date: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const service = await ctx.db.get(args.serviceId);
     if (!service) throw new Error("Service not found");
@@ -115,16 +136,60 @@ export const remove = mutation({
 });
 
 export const reorderServices = mutation({
-  args: { orgId: v.id("organizations"), fromIndex: v.number(), toIndex: v.number() },
+  args: {
+    orgId: v.id("organizations"),
+    fromIndex: v.number(),
+    toIndex: v.number(),
+  },
   handler: async (ctx, args) => {
     const { orgId, fromIndex, toIndex } = args;
     if (fromIndex === toIndex) return;
-    const services = await ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", orgId)).collect();
+    const services = await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
     const sorted = services.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     if (fromIndex < 0 || fromIndex >= sorted.length) return;
     if (toIndex < 0 || toIndex >= sorted.length) return;
     const [moved] = sorted.splice(fromIndex, 1);
     sorted.splice(toIndex, 0, moved);
-    await Promise.all(sorted.map((service, index) => ctx.db.patch(service._id, { order: index })));
+    await Promise.all(
+      sorted.map((service, index) =>
+        ctx.db.patch(service._id, { order: index })
+      )
+    );
+  },
+});
+
+// Helper function to remove items from all services in an organization
+export async function removeItemsFromAllServices(
+  ctx: MutationCtx,
+  orgId: Id<"organizations">,
+  shouldRemove: (item: any) => boolean
+) {
+  const services = await ctx.db
+    .query("services")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+
+  for (const service of services) {
+    const newItems = service.items.filter((item) => !shouldRemove(item));
+    if (newItems.length !== service.items.length) {
+      await ctx.db.patch(service._id, { items: newItems });
+    }
+  }
+}
+
+export const removeMediaForFolder = mutation({
+  args: { folderId: v.string(), orgId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    await removeItemsFromAllServices(
+      ctx,
+      args.orgId,
+      (item) =>
+        item.type === "media" &&
+        (item.refId === args.folderId ||
+          item.refId.startsWith(args.folderId + "-"))
+    );
   },
 });

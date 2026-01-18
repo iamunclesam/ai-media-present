@@ -18,6 +18,8 @@ import type {
   MediaFolder,
 } from "@/hooks/useMediaFolders";
 import type { Id } from "@/../convex/_generated/dataModel";
+import { useMutation } from "convex/react";
+import { api } from "@/../convex/_generated/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -68,7 +70,7 @@ const MediaItemCard = memo(function MediaItemCard({
             "group relative aspect-video overflow-hidden rounded-lg border bg-black transition",
             isActive
               ? "border-primary ring-2 ring-primary"
-              : "border-border hover:border-primary",
+              : "border-border hover:border-primary"
           )}
         >
           {item.type === "image" ? (
@@ -138,6 +140,7 @@ interface MediaPanelProps {
   isInsideService: boolean;
   selectedServiceId: Id<"services"> | null;
   onAddToService: (mediaId: string, mediaName: string) => Promise<void>;
+  orgId: Id<"organizations"> | null;
 }
 
 export const MediaPanel = memo(function MediaPanel({
@@ -146,6 +149,7 @@ export const MediaPanel = memo(function MediaPanel({
   isInsideService,
   selectedServiceId,
   onAddToService,
+  orgId,
 }: MediaPanelProps) {
   const {
     folders,
@@ -164,15 +168,15 @@ export const MediaPanel = memo(function MediaPanel({
     ? allMediaItems.filter((item) => item.folderId === selectedFolderId)
     : allMediaItems;
   const imageCount = folderFilteredItems.filter(
-    (item) => item.type === "image",
+    (item) => item.type === "image"
   ).length;
   const videoCount = folderFilteredItems.filter(
-    (item) => item.type === "video",
+    (item) => item.type === "video"
   ).length;
 
   const [filter, setFilter] = useState<MediaFilter>("all");
   const [folderToRemove, setFolderToRemove] = useState<MediaFolder | null>(
-    null,
+    null
   );
 
   const handleAddToService = async (item: MediaItem) => {
@@ -196,13 +200,27 @@ export const MediaPanel = memo(function MediaPanel({
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to add folder",
+        error instanceof Error ? error.message : "Failed to add folder"
       );
     }
   };
 
+  const removeMediaFromServices = useMutation(
+    api.services.removeMediaForFolder
+  );
+
   const handleConfirmRemoveFolder = async () => {
     if (!folderToRemove) return;
+
+    if (orgId) {
+      try {
+        await removeMediaFromServices({ folderId: folderToRemove.id, orgId });
+      } catch (e) {
+        console.error("Failed to cleanup media from services", e);
+        // Continue with local removal even if cleanup fails
+      }
+    }
+
     await removeFolder(folderToRemove.id);
     toast.success(`Removed folder: ${folderToRemove.name}`);
     setFolderToRemove(null);
@@ -298,7 +316,7 @@ export const MediaPanel = memo(function MediaPanel({
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
                       selectedFolderId === null
                         ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-secondary",
+                        : "text-foreground hover:bg-secondary"
                     )}
                   >
                     <Folder className="h-3.5 w-3.5 shrink-0" />
@@ -315,7 +333,7 @@ export const MediaPanel = memo(function MediaPanel({
                         "group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition",
                         selectedFolderId === folder.id
                           ? "bg-primary text-primary-foreground"
-                          : "text-foreground hover:bg-secondary",
+                          : "text-foreground hover:bg-secondary"
                       )}
                     >
                       <button
@@ -349,109 +367,72 @@ export const MediaPanel = memo(function MediaPanel({
         {/* Media grid */}
         <ResizablePanel defaultSize={80}>
           <div className="flex h-full flex-col">
-          {/* Filter tabs */}
-          <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
-            <button
-              type="button"
-              onClick={() => setFilter("all")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
-                filter === "all"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              )}
-            >
-              All
-              <span className="text-[10px] opacity-70">
-                ({folderFilteredItems.length})
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter("images")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
-                filter === "images"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              )}
-            >
-              <Image className="h-3 w-3" />
-              Images
-              <span className="text-[10px] opacity-70">({imageCount})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter("videos")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
-                filter === "videos"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              )}
-            >
-              <Video className="h-3 w-3" />
-              Videos
-              <span className="text-[10px] opacity-70">({videoCount})</span>
-            </button>
-          </div>
+            {/* Filter tabs */}
+            <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+              <button
+                type="button"
+                onClick={() => setFilter("all")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
+                  filter === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                All
+                <span className="text-[10px] opacity-70">
+                  ({folderFilteredItems.length})
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter("images")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
+                  filter === "images"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <Image className="h-3 w-3" />
+                Images
+                <span className="text-[10px] opacity-70">({imageCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilter("videos")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition",
+                  filter === "videos"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <Video className="h-3 w-3" />
+                Videos
+                <span className="text-[10px] opacity-70">({videoCount})</span>
+              </button>
+            </div>
 
-          {/* Media items grid - using Activity for each filter view to pre-render */}
-          <div className="relative flex-1 overflow-hidden">
-            {isLoading ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Loading media...
-              </div>
-            ) : allMediaItems.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                <FolderPlus className="h-8 w-8" />
-                <span>Add a folder to see media</span>
-              </div>
-            ) : (
-              <>
-                {/* All items view - pre-rendered with Activity */}
-                <Activity mode={filter === "all" ? "visible" : "hidden"}>
-                  <div className="absolute inset-0 overflow-auto p-3">
-                    <div className="grid grid-cols-4 gap-2">
-                      {/* Render ALL items, use CSS hidden for folder filtering */}
-                      {allMediaItems.map((item) => {
-                        const matchesFolder =
-                          !selectedFolderId ||
-                          item.folderId === selectedFolderId;
-                        return (
-                          <div
-                            key={item.id}
-                            className={cn(!matchesFolder && "hidden")}
-                          >
-                            <MediaItemCard
-                              item={item}
-                              isActive={activeMediaItem?.id === item.id}
-                              onSelect={handleSelectMedia}
-                              onAddToService={handleAddToService}
-                              isInsideService={isInsideService}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {/* Empty state overlay */}
-                    {folderFilteredItems.length === 0 && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Image className="h-8 w-8" />
-                        <span>No media in this folder</span>
-                      </div>
-                    )}
-                  </div>
-                </Activity>
-
-                {/* Images view - pre-rendered with Activity */}
-                <Activity mode={filter === "images" ? "visible" : "hidden"}>
-                  <div className="absolute inset-0 overflow-auto p-3">
-                    <div className="grid grid-cols-4 gap-2">
-                      {/* Render ALL images, use CSS hidden for folder filtering */}
-                      {allMediaItems
-                        .filter((item) => item.type === "image")
-                        .map((item) => {
+            {/* Media items grid - using Activity for each filter view to pre-render */}
+            <div className="relative flex-1 overflow-hidden">
+              {isLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading media...
+                </div>
+              ) : allMediaItems.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <FolderPlus className="h-8 w-8" />
+                  <span>Add a folder to see media</span>
+                </div>
+              ) : (
+                <>
+                  {/* All items view - pre-rendered with Activity */}
+                  <Activity mode={filter === "all" ? "visible" : "hidden"}>
+                    <div className="absolute inset-0 overflow-auto p-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {/* Render ALL items, use CSS hidden for folder filtering */}
+                        {allMediaItems.map((item) => {
                           const matchesFolder =
                             !selectedFolderId ||
                             item.folderId === selectedFolderId;
@@ -470,56 +451,93 @@ export const MediaPanel = memo(function MediaPanel({
                             </div>
                           );
                         })}
-                    </div>
-                    {/* Empty state overlay */}
-                    {imageCount === 0 && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Image className="h-8 w-8" />
-                        <span>No images found</span>
                       </div>
-                    )}
-                  </div>
-                </Activity>
+                      {/* Empty state overlay */}
+                      {folderFilteredItems.length === 0 && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Image className="h-8 w-8" />
+                          <span>No media in this folder</span>
+                        </div>
+                      )}
+                    </div>
+                  </Activity>
 
-                {/* Videos view - pre-rendered with Activity */}
-                <Activity mode={filter === "videos" ? "visible" : "hidden"}>
-                  <div className="absolute inset-0 overflow-auto p-3">
-                    <div className="grid grid-cols-4 gap-2">
-                      {/* Render ALL videos, use CSS hidden for folder filtering */}
-                      {allMediaItems
-                        .filter((item) => item.type === "video")
-                        .map((item) => {
-                          const matchesFolder =
-                            !selectedFolderId ||
-                            item.folderId === selectedFolderId;
-                          return (
-                            <div
-                              key={item.id}
-                              className={cn(!matchesFolder && "hidden")}
-                            >
-                              <MediaItemCard
-                                item={item}
-                                isActive={activeMediaItem?.id === item.id}
-                                onSelect={handleSelectMedia}
-                                onAddToService={handleAddToService}
-                                isInsideService={isInsideService}
-                              />
-                            </div>
-                          );
-                        })}
-                    </div>
-                    {/* Empty state overlay */}
-                    {videoCount === 0 && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Video className="h-8 w-8" />
-                        <span>No videos found</span>
+                  {/* Images view - pre-rendered with Activity */}
+                  <Activity mode={filter === "images" ? "visible" : "hidden"}>
+                    <div className="absolute inset-0 overflow-auto p-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {/* Render ALL images, use CSS hidden for folder filtering */}
+                        {allMediaItems
+                          .filter((item) => item.type === "image")
+                          .map((item) => {
+                            const matchesFolder =
+                              !selectedFolderId ||
+                              item.folderId === selectedFolderId;
+                            return (
+                              <div
+                                key={item.id}
+                                className={cn(!matchesFolder && "hidden")}
+                              >
+                                <MediaItemCard
+                                  item={item}
+                                  isActive={activeMediaItem?.id === item.id}
+                                  onSelect={handleSelectMedia}
+                                  onAddToService={handleAddToService}
+                                  isInsideService={isInsideService}
+                                />
+                              </div>
+                            );
+                          })}
                       </div>
-                    )}
-                  </div>
-                </Activity>
-              </>
-            )}
-          </div>
+                      {/* Empty state overlay */}
+                      {imageCount === 0 && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Image className="h-8 w-8" />
+                          <span>No images found</span>
+                        </div>
+                      )}
+                    </div>
+                  </Activity>
+
+                  {/* Videos view - pre-rendered with Activity */}
+                  <Activity mode={filter === "videos" ? "visible" : "hidden"}>
+                    <div className="absolute inset-0 overflow-auto p-3">
+                      <div className="grid grid-cols-4 gap-2">
+                        {/* Render ALL videos, use CSS hidden for folder filtering */}
+                        {allMediaItems
+                          .filter((item) => item.type === "video")
+                          .map((item) => {
+                            const matchesFolder =
+                              !selectedFolderId ||
+                              item.folderId === selectedFolderId;
+                            return (
+                              <div
+                                key={item.id}
+                                className={cn(!matchesFolder && "hidden")}
+                              >
+                                <MediaItemCard
+                                  item={item}
+                                  isActive={activeMediaItem?.id === item.id}
+                                  onSelect={handleSelectMedia}
+                                  onAddToService={handleAddToService}
+                                  isInsideService={isInsideService}
+                                />
+                              </div>
+                            );
+                          })}
+                      </div>
+                      {/* Empty state overlay */}
+                      {videoCount === 0 && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Video className="h-8 w-8" />
+                          <span>No videos found</span>
+                        </div>
+                      )}
+                    </div>
+                  </Activity>
+                </>
+              )}
+            </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

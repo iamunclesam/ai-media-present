@@ -61,8 +61,10 @@ export default function Home() {
     selectedSong,
     selectedSongId,
     selectedCategoryId,
+    searchQuery,
     setSelectedSongId,
     setSelectedCategoryId,
+    setSearchQuery,
     createNewSong,
     updateExistingSong,
     deleteSong,
@@ -110,7 +112,8 @@ export default function Home() {
 
   // Preview media - shown in Show view but NOT output (for service items only)
   // activeMediaItem = what's actually output to the projector (backgrounds from media panel)
-  const [previewMediaItem, setPreviewMediaItem] = useState<typeof activeMediaItem>(null);
+  const [previewMediaItem, setPreviewMediaItem] =
+    useState<typeof activeMediaItem>(null);
 
   // The media shown in Show view: ONLY previewMediaItem (service items)
   // Media panel items (activeMediaItem) are backgrounds and don't show in Show view
@@ -134,7 +137,7 @@ export default function Home() {
     if (currentId !== prevMediaIdRef.current) {
       // Reset time when switching media
       setVideoCurrentTime(0);
-      
+
       // Check if we should auto-play
       if (shouldAutoPlay && activeMediaItem?.type === "video") {
         setIsVideoPlaying(true);
@@ -143,7 +146,7 @@ export default function Home() {
         // Only reset playing state if switching, not on first load
         setIsVideoPlaying(false);
       }
-      
+
       prevMediaIdRef.current = currentId;
     }
   }, [activeMediaItem?.id, activeMediaItem?.type, shouldAutoPlay]);
@@ -728,6 +731,8 @@ export default function Home() {
                         onAddToService={handleAddToService}
                         onCreateCategory={createNewCategory}
                         onFixLyrics={fixLyrics}
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
                       />
                     </div>
                   </Activity>
@@ -741,6 +746,7 @@ export default function Home() {
                         isInsideService={isInsideService}
                         selectedServiceId={selectedServiceId}
                         onAddToService={handleAddMediaToService}
+                        orgId={orgId}
                       />
                     </div>
                   </Activity>

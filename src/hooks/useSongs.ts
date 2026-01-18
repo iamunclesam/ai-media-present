@@ -64,6 +64,7 @@ export function useSongs(orgId: Id<"organizations"> | null) {
   );
   const [selectedCategoryId, setSelectedCategoryId] =
     useState<Id<"categories"> | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Restore selection from localStorage after hydration
   useEffect(() => {
@@ -104,14 +105,31 @@ export function useSongs(orgId: Id<"organizations"> | null) {
 
   const filteredSongs = useMemo(() => {
     if (!songs) return [];
-    if (!selectedCategoryId) return songs;
-    return songs.filter((s) => s.categoryId === selectedCategoryId);
-  }, [songs, selectedCategoryId]);
+
+    let result = songs;
+
+    // Filter by category
+    if (selectedCategoryId) {
+      result = result.filter((s) => s.categoryId === selectedCategoryId);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (s) =>
+          s.title.toLowerCase().includes(query) ||
+          s.lyrics.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [songs, selectedCategoryId, searchQuery]);
 
   const createNewSong = async (
     title: string,
     lyrics: string,
-    categoryId?: Id<"categories">,
+    categoryId?: Id<"categories">
   ) => {
     if (!orgId || !title.trim()) return null;
     const slides = parseLyricsToSlides(lyrics);
@@ -128,7 +146,7 @@ export function useSongs(orgId: Id<"organizations"> | null) {
   const updateExistingSong = async (
     songId: Id<"songs">,
     title: string,
-    lyrics: string,
+    lyrics: string
   ) => {
     const slides = parseLyricsToSlides(lyrics);
     await updateSong({ songId, title, lyrics, slides });
@@ -147,8 +165,10 @@ export function useSongs(orgId: Id<"organizations"> | null) {
     selectedSong,
     selectedSongId,
     selectedCategoryId,
+    searchQuery,
     setSelectedSongId,
     setSelectedCategoryId,
+    setSearchQuery,
     createNewSong,
     updateExistingSong,
     deleteSong,

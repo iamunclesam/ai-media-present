@@ -4,7 +4,9 @@ import { memo, useState } from "react";
 import type { Id } from "@/../convex/_generated/dataModel";
 import type { Song, Category } from "@/types";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Search } from "lucide-react";
 
 interface ShowsPanelProps {
   songs: Song[];
@@ -18,13 +20,15 @@ interface ShowsPanelProps {
   onCreateSong: (
     title: string,
     lyrics: string,
-    categoryId?: Id<"categories">,
+    categoryId?: Id<"categories">
   ) => Promise<unknown>;
   onRenameSong: (id: Id<"songs">, title: string) => Promise<void>;
   onDeleteSong: (id: Id<"songs">) => Promise<void>;
   onAddToService: (songId: Id<"songs">) => void;
   onCreateCategory: (name: string) => Promise<unknown>;
   onFixLyrics: (lyrics: string) => Promise<string>;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 export const ShowsPanel = memo(function ShowsPanel({
@@ -42,6 +46,8 @@ export const ShowsPanel = memo(function ShowsPanel({
   onAddToService,
   onCreateCategory,
   onFixLyrics,
+  searchQuery,
+  onSearchChange,
 }: ShowsPanelProps) {
   const [showNewSongDialog, setShowNewSongDialog] = useState(false);
   const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
@@ -61,43 +67,60 @@ export const ShowsPanel = memo(function ShowsPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Category bar */}
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1">
-        <p className="text-[10px] text-muted-foreground mr-2">Categories:</p>
-        <button
-          type="button"
-          onClick={() => onSelectCategory(null)}
-          className={cn(
-            "px-2 py-1 rounded text-[10px] transition",
-            !selectedCategoryId
-              ? "bg-primary/20 text-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          All
-        </button>
-        {categories.map((cat) => (
+      {/* Category bar and Search */}
+      <div className="flex items-center justify-between border-b border-border px-2 py-1 gap-4">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          <p className="text-[10px] text-muted-foreground mr-2">Categories:</p>
           <button
-            key={cat._id}
             type="button"
-            onClick={() => onSelectCategory(cat._id)}
+            onClick={() => onSelectCategory(null)}
             className={cn(
               "px-2 py-1 rounded text-[10px] transition",
-              selectedCategoryId === cat._id
+              !selectedCategoryId
                 ? "bg-primary/20 text-primary"
-                : "text-muted-foreground hover:text-foreground",
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {cat.name}
+            All
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowNewCategoryDialog(true)}
-          className="px-2 py-1 text-[10px] text-muted-foreground hover:text-primary"
-        >
-          +
-        </button>
+          {categories.map((cat) => (
+            <button
+              key={cat._id}
+              type="button"
+              onClick={() => onSelectCategory(cat._id)}
+              className={cn(
+                "px-2 py-1 rounded text-[10px] transition",
+                selectedCategoryId === cat._id
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {cat.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowNewCategoryDialog(true)}
+            className="px-2 py-1 text-[10px] text-muted-foreground hover:text-primary"
+          >
+            +
+          </button>
+        </div>
+
+        {/* Search Bar - Opposite the categories */}
+        <div className="relative w-40 shrink-0">
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={
+              selectedCategoryId
+                ? `Search all ${categories.find((c) => c._id === selectedCategoryId)?.name ?? "category"}...`
+                : "Search all shows..."
+            }
+            className="h-7 w-full pl-7 text-[10px]"
+          />
+        </div>
       </div>
 
       {/* Songs grid */}
@@ -130,6 +153,7 @@ export const ShowsPanel = memo(function ShowsPanel({
           onCreate={onCreateSong}
           onFixLyrics={onFixLyrics}
           categoryId={selectedCategoryId}
+          categories={categories}
         />
       )}
 
@@ -191,7 +215,7 @@ const SongCard = memo(function SongCard({
         "group rounded-lg border px-3 py-2 text-left text-xs transition",
         isSelected
           ? "border-primary bg-primary/10 text-primary"
-          : "border-border text-foreground hover:border-primary/50",
+          : "border-border text-foreground hover:border-primary/50"
       )}
     >
       <div className="flex items-start justify-between">
@@ -262,20 +286,27 @@ function NewSongDialog({
   onCreate,
   onFixLyrics,
   categoryId,
+  categories,
 }: {
   onClose: () => void;
   onCreate: (
     title: string,
     lyrics: string,
-    categoryId?: Id<"categories">,
+    categoryId?: Id<"categories">
   ) => Promise<unknown>;
   onFixLyrics: (lyrics: string) => Promise<string>;
   categoryId: Id<"categories"> | null;
+  categories: Category[];
 }) {
   const [title, setTitle] = useState("");
   const [lyrics, setLyrics] = useState("");
   const [isFixing, setIsFixing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Default to selected category, or first available category if "All" is selected
+  const [targetCategoryId, setTargetCategoryId] = useState<string>(
+    categoryId ?? categories[0]?._id ?? ""
+  );
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -283,7 +314,11 @@ function NewSongDialog({
       return;
     }
     try {
-      await onCreate(title.trim(), lyrics, categoryId ?? undefined);
+      await onCreate(
+        title.trim(),
+        lyrics,
+        (targetCategoryId as Id<"categories">) || undefined
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create");
@@ -306,20 +341,50 @@ function NewSongDialog({
   return (
     <Dialog title="New show" onClose={onClose}>
       <div className="space-y-3">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Song title"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-          autoFocus
-        />
-        <textarea
-          value={lyrics}
-          onChange={(e) => setLyrics(e.target.value)}
-          placeholder={"[Verse 1]\nLine 1\nLine 2\n\n[Chorus]\nLine 1"}
-          rows={10}
-          className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-        />
+        {/* Category Dropdown */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Category
+          </label>
+          <select
+            value={targetCategoryId}
+            onChange={(e) => setTargetCategoryId(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            {categories.map((cat) => (
+              <option key={cat._id} value={cat._id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Title
+          </label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Song title"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">
+            Lyrics
+          </label>
+          <textarea
+            value={lyrics}
+            onChange={(e) => setLyrics(e.target.value)}
+            placeholder={"[Verse 1]\nLine 1\nLine 2\n\n[Chorus]\nLine 1"}
+            rows={10}
+            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
+
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex gap-2">
           <button

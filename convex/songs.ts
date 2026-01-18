@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { removeItemsFromAllServices } from "./services";
 
 export const listByOrg = query({
   args: { orgId: v.id("organizations") },
@@ -91,6 +92,14 @@ export const update = mutation({
 export const remove = mutation({
   args: { songId: v.id("songs") },
   handler: async (ctx, args) => {
+    const song = await ctx.db.get(args.songId);
+    if (song) {
+      await removeItemsFromAllServices(
+        ctx,
+        song.orgId,
+        (item) => item.type === "song" && item.refId === args.songId
+      );
+    }
     await ctx.db.delete(args.songId);
   },
 });
