@@ -45,19 +45,24 @@ export function useShowVideoSync(params: {
   useEffect(() => {
     const currentId = activeMediaItem?.id;
 
-    if (currentId !== prevMediaIdRef.current) {
+    if (currentId && currentId !== prevMediaIdRef.current) {
       setVideoCurrentTime(0);
 
       // Autoplay if requested and output is video
       if (shouldAutoPlay && activeMediaItem?.type === "video") {
         setIsVideoPlaying(true);
         onAutoPlayConsumed();
-      } else if (prevMediaIdRef.current !== undefined) {
-        // only reset playing when switching (not first load)
+      } else {
+        // Only reset playing if we've switched to a different media item
         setIsVideoPlaying(false);
       }
 
       prevMediaIdRef.current = currentId;
+    } else if (!currentId && prevMediaIdRef.current) {
+      // Cleared media
+      setIsVideoPlaying(false);
+      setVideoCurrentTime(0);
+      prevMediaIdRef.current = undefined;
     }
   }, [activeMediaItem?.id, activeMediaItem?.type, shouldAutoPlay, onAutoPlayConsumed]);
 

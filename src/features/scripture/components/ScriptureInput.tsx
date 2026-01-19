@@ -102,15 +102,26 @@ export function ScriptureInput({
           b.abbreviation?.toLowerCase().startsWith(bookPart.toLowerCase())
         );
 
-        if (matches.length === 0) return; // Block invalid
+        if (matches.length > 0) {
+          // If exactly one match, and it's a unique book name, inline auto-complete
+          // We filter for unique names because multiple versions might return "Matthew" multiple times
+          const uniqueNames = new Set(matches.map((b) => b.name));
 
-        // If exactly one match, auto-complete
-        if (matches.length === 1) {
-          const matchedBook = matches[0];
-          const completedValue = matchedBook.name + (newVal.endsWith(" ") ? " " : " ");
-          setValue(completedValue);
-          updateSuggestions(completedValue);
-          return;
+          if (uniqueNames.size === 1) {
+            const matchedBookName = matches[0].name;
+            const completedValue =
+              matchedBookName + (newVal.endsWith(" ") ? " " : " ");
+
+            // Only auto-complete if the new value is actually longer (prevent loops)
+            // and if we are not already at the full name
+            if (completedValue.length > newVal.length) {
+              setValue(completedValue);
+              updateSuggestions(completedValue);
+              return;
+            }
+          }
+
+          updateSuggestions(newVal);
         }
       } else {
         const lastChar = newVal.slice(-1);
@@ -136,9 +147,12 @@ export function ScriptureInput({
           placeholder={placeholder}
           className={cn(
             "pl-9 h-8 text-xs bg-background/50 border-muted-foreground/20 focus-visible:ring-1 focus-visible:ring-primary/40",
-            parsed.errors.length > 0 && value.includes(" ") && "border-destructive/50 focus-visible:ring-destructive/30"
+            parsed.errors.length > 0 &&
+              value.includes(" ") &&
+              "border-destructive/50 focus-visible:ring-destructive/30",
           )}
         />
+        {/* Dropdown removed as per user request */}
       </div>
     </div>
   );

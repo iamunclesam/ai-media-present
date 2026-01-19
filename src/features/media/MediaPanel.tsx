@@ -33,11 +33,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import type {
-  MediaState,
-  MediaItem,
-  MediaFolder,
-} from "@/hooks/useMediaFolders";
+import type { MediaState, MediaItem, MediaFolder } from "./hooks";
 import type { Id } from "@/../convex/_generated/dataModel";
 import { useMutation } from "convex/react";
 import { api } from "@/../convex/_generated/api";

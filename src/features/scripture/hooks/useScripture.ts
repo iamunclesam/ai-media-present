@@ -27,9 +27,13 @@ export function useScripture() {
     try {
       const buffer = new Uint8Array(await file.arrayBuffer());
       const { processBibleBuffer } = await import("../lib/import-pipeline");
-      await processBibleBuffer(buffer, (progress) => {
-        setActiveImport(progress);
-      });
+      await processBibleBuffer(
+        buffer,
+        (progress) => {
+          setActiveImport(progress);
+        },
+        file.name,
+      );
       toast.success(`"${file.name}" imported successfully`);
     } catch (error) {
       console.error(error);
@@ -65,7 +69,8 @@ export function useScripture() {
       // Actually, if they type "NKJV", and we don't have it, we should probably warn or just show nothing.
       // But the user said "it said not found", so let's make sure it matches.
       if (!ref.versionCode) {
-        targetVersion = versions[0];
+        const nkjv = versions.find((v) => v.code.toUpperCase() === "NKJV");
+        targetVersion = nkjv || versions[0];
       }
     }
 

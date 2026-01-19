@@ -15,7 +15,9 @@ export async function getSuggestions(
 ): Promise<Suggestion[]> {
   const trimInput = input.trimStart();
   if (!trimInput) {
-    return availableBooks.slice(0, 10).map(b => ({ text: b.name, type: "book" as SuggestionType }));
+    // Return none if empty, or maybe popular books?
+    // Let's return nothing to keep it clean until they type
+    return [];
   }
 
   // Split by space to see where we are
@@ -39,7 +41,28 @@ export async function getSuggestions(
 
   // If we are still typing the book
   if (remaining.length === 0 && !input.endsWith(" ")) {
-    return matchedBooks.map(b => ({ text: b.name, type: "book" as SuggestionType }));
+    // Sort matches: starts with input first, then others
+    const sorted = matchedBooks.sort((a, b) => {
+      const aStarts = a.name.toLowerCase().startsWith(bookSearch);
+      const bStarts = b.name.toLowerCase().startsWith(bookSearch);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Deduplicate books by name
+    const seen = new Set<string>();
+    const uniqueBooks = [];
+    for (const b of sorted) {
+      if (!seen.has(b.name)) {
+        seen.add(b.name);
+        uniqueBooks.push(b);
+      }
+    }
+
+    return uniqueBooks
+      .slice(0, 5)
+      .map((b) => ({ text: b.name, type: "book" as SuggestionType }));
   }
 
   // If book is matched, move to chapters/verses

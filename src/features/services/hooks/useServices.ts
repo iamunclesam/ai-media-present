@@ -153,6 +153,19 @@ export function useServices(orgId: Id<"organizations"> | null, songs: Song[]) {
     });
   };
 
+  const addScriptureToService = async (
+    serviceId: Id<"services">,
+    ref: string,
+    text: string,
+  ) => {
+    await addItemToService({
+      serviceId,
+      type: "scripture",
+      refId: ref,
+      label: text,
+    });
+  };
+
   const removeFromService = async (
     serviceId: Id<"services">,
     index: number
@@ -199,6 +212,7 @@ export function useServices(orgId: Id<"organizations"> | null, songs: Song[]) {
     deleteService,
     addSongToService,
     addMediaToService,
+    addScriptureToService,
     removeFromService,
     reorderServiceItems,
     reorderServices,

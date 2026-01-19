@@ -7,16 +7,16 @@ import type { Id } from "@/../convex/_generated/dataModel";
 import {
   useOrganization,
   usePlayback,
-  useSongs,
-  useServices,
   useCategories,
-  useMediaFolders,
+  useShowVideoSync,
+  useOutputBroadcast,
+  usePersistedUIState,
+  usePresentMediaFlow,
+  useGlobalShortcuts,
 } from "@/hooks";
-import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
-import { usePersistedUIState } from "@/hooks/usePersistedUIState";
-import { useShowVideoSync } from "@/hooks/useShowVideoSync";
-import { useOutputBroadcast } from "@/hooks/useOutputBroadcast";
-import { usePresentMediaFlow } from "@/hooks/usePresentMediaFlow";
+import { useSongs } from "@/features/songs/hooks";
+import { useServices } from "@/features/services/hooks";
+import { useMediaFolders } from "@/features/media/hooks";
 
 // Lib
 import {
@@ -182,10 +182,14 @@ export default function Home() {
     }
     return [];
   }, [selectedSong, scriptureSlides]);
-  const activeSlideText = useMemo(
-    () => getActiveSlideText(activeSlideId, songs),
-    [activeSlideId, songs],
-  );
+  const activeSlideText = useMemo(() => {
+    if (activeSlideId?.startsWith("scripture:")) {
+      const indexStr = activeSlideId.split(":")[1];
+      const index = parseInt(indexStr, 10);
+      return scriptureSlides[index] ?? null;
+    }
+    return getActiveSlideText(activeSlideId, songs);
+  }, [activeSlideId, songs, scriptureSlides]);
   const slideGroups = useMemo(
     () => getSlideGroups(selectedSong),
     [selectedSong],
@@ -459,6 +463,7 @@ export default function Home() {
               orgId,
             }}
             onSendScripture={handleScriptureOutput}
+            orgId={orgId}
           />
         </ResizablePanel>
 

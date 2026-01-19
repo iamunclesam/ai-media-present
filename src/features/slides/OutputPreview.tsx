@@ -18,8 +18,8 @@ import type {
   MediaItem,
   VideoSettings,
   MediaFilters,
-} from "@/hooks/useMediaFolders";
-import { filtersToCSS, DEFAULT_FILTERS } from "@/hooks/useMediaFolders";
+} from "@/features/media/hooks";
+import { filtersToCSS, DEFAULT_FILTERS } from "@/features/media/hooks";
 
 // Fixed output preview dimensions (16:9 aspect ratio)
 const OUTPUT_WIDTH = 240;

@@ -4,6 +4,7 @@ import { Activity } from "react";
 import type { ComponentProps } from "react";
 import type { BottomTab, ViewMode } from "@/types";
 import type { SlideData } from "@/features/slides";
+import type { Id } from "@/../convex/_generated/dataModel";
 
 import { SlidesGrid } from "@/features/slides";
 import { LyricsEditor } from "@/features/editor";
@@ -72,6 +73,7 @@ type Props = {
   mediaPanelProps: MediaProps;
 
   onSendScripture: (slides: string[]) => void;
+  orgId: Id<"organizations"> | null;
 };
 
 export function PresentCenterArea({
@@ -100,6 +102,7 @@ export function PresentCenterArea({
   showsPanelProps,
   mediaPanelProps,
   onSendScripture,
+  orgId,
 }: Props) {
   return (
     <ResizablePanelGroup direction="vertical" className="h-full">
@@ -195,7 +198,7 @@ export function PresentCenterArea({
             </Activity>
 
             <Activity mode={bottomTab === "scripture" ? "visible" : "hidden"}>
-              <ScripturePanel onSendToOutput={onSendScripture} />
+              <ScripturePanel onSendToOutput={onSendScripture} orgId={orgId} />
             </Activity>
           </div>
         </div>

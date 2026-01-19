@@ -37,7 +37,13 @@ type MediaMessage = {
   videoCurrentTime: number;
 };
 
-type OutputMessage = ActiveSlideMessage | MediaMessage;
+type PlaybackSyncMessage = {
+  type: "playback-sync";
+  isVideoPlaying: boolean;
+  videoCurrentTime: number;
+};
+
+type OutputMessage = ActiveSlideMessage | MediaMessage | PlaybackSyncMessage;
 
 export default function OutputPage() {
   const { isSignedIn } = useAuth();
@@ -75,17 +81,23 @@ export default function OutputPage() {
   useEffect(() => {
     const channel = new BroadcastChannel("present-output");
     const handler = (event: MessageEvent<OutputMessage>) => {
-      if (event.data?.type === "active-slide") {
-        setOverrideSlideId(event.data.slideId);
-        setOverrideSlideText(event.data.slideText ?? null);
-      } else if (event.data?.type === "media-update") {
-        setMediaItem(event.data.mediaItem);
-        setShowText(event.data.showText);
-        setShowMedia(event.data.showMedia);
-        setVideoSettings(event.data.videoSettings);
-        setMediaFilterCSS(event.data.mediaFilterCSS ?? "none");
-        setIsVideoPlaying(event.data.isVideoPlaying ?? false);
-        setVideoCurrentTime(event.data.videoCurrentTime ?? 0);
+      const data = event.data;
+      if (!data) return;
+
+      if (data.type === "active-slide") {
+        setOverrideSlideId(data.slideId);
+        setOverrideSlideText(data.slideText ?? null);
+      } else if (data.type === "media-update") {
+        setMediaItem(data.mediaItem);
+        setShowText(data.showText);
+        setShowMedia(data.showMedia);
+        setVideoSettings(data.videoSettings);
+        setMediaFilterCSS(data.mediaFilterCSS ?? "none");
+        setIsVideoPlaying(data.isVideoPlaying ?? false);
+        setVideoCurrentTime(data.videoCurrentTime ?? 0);
+      } else if (data.type === "playback-sync") {
+        setIsVideoPlaying(data.isVideoPlaying);
+        setVideoCurrentTime(data.videoCurrentTime);
       }
     };
     channel.addEventListener("message", handler);

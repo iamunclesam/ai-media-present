@@ -45,27 +45,31 @@ export async function importBibleModule(
 
 export async function processBibleBuffer(
   buffer: Uint8Array,
-  onProgress: (progress: ImportProgress) => void
+  onProgress: (progress: ImportProgress) => void,
+  originalFileName?: string,
 ): Promise<void> {
   // 2. Unzip (if it's a zip, otherwise assume it's raw JSON/XML)
   let fileContent: string;
   let fileName: string | undefined;
 
   onProgress({ phase: "unzipping", percent: 0 });
-  
+
   try {
     const unzipped = unzipSync(buffer);
     fileName = Object.keys(unzipped).find(
-      (name) => name.endsWith(".json") || name.endsWith(".xml")
+      (name) => name.endsWith(".json") || name.endsWith(".xml"),
     );
-    if (!fileName) throw new Error("No valid Bible file (JSON/XML) found in ZIP");
+    if (!fileName)
+      throw new Error("No valid Bible file (JSON/XML) found in ZIP");
     fileContent = new TextDecoder().decode(unzipped[fileName]);
     onProgress({ phase: "unzipping", percent: 100 });
   } catch (e) {
     // Not a zip, try to parse as direct file
     fileContent = new TextDecoder().decode(buffer);
     // Simple heuristic to detect JSON vs XML
-    fileName = fileContent.trim().startsWith("{") ? "bible.json" : "bible.xml";
+    fileName =
+      originalFileName ||
+      (fileContent.trim().startsWith("{") ? "bible.json" : "bible.xml");
     onProgress({ phase: "unzipping", percent: 100 });
   }
 
@@ -84,11 +88,19 @@ async function importFromJson(
 ) {
   onProgress({ phase: "parsing", percent: 100 });
   const data = JSON.parse(content);
-  const bibleName = data.version?.name || defaultName.split(".")[0].replace(/[_-]/g, " ");
+  
+  const fileNameBase = defaultName.split(".")[0];
+  const bibleName = data.version?.name || fileNameBase.replace(/[_-]/g, " ");
+
+  // Ensure unique ID if not provided, or if it matches an existing one
+  const baseId =
+    data.version?.id || bibleName.toLowerCase().replace(/\s+/g, "-");
+  const versionId = baseId; 
+
   const version: BibleVersion = {
     ...data.version,
     name: bibleName,
-    id: data.version?.id || bibleName.toLowerCase().replace(/\s+/g, "-"),
+    id: versionId,
     lastUpdated: Date.now(),
     size: content.length,
   };
@@ -115,10 +127,16 @@ async function importFromXml(
   // Robust name extraction
   const root = xmlDoc.documentElement;
   const fileNameBase = defaultName.split(".")[0];
-  const bibleName = root.getAttribute("name") || 
-                    root.getAttribute("title") || 
-                    root.getAttribute("n") ||
-                    fileNameBase.replace(/[_-]/g, " ");
+  
+  let bibleName =
+    root.getAttribute("name") ||
+    root.getAttribute("title") ||
+    root.getAttribute("n");
+
+  // If name is too generic or missing, use filename
+  if (!bibleName || bibleName.toLowerCase() === "bible") {
+    bibleName = fileNameBase.replace(/[_-]/g, " ");
+  }
 
   const bibleId = bibleName.toLowerCase().replace(/\s+/g, "-");
   
