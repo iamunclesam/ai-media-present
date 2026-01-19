@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { AuthControls } from "@/components/ui/AuthControls";
+import { AuthControls } from "@/components/AuthControls";
 import type { ViewMode } from "@/types";
 import { cn } from "@/lib/utils";
 

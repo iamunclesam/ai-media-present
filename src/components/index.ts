@@ -6,4 +6,4 @@ export {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
-} from "./resizable";
+} from "./ui/resizable";

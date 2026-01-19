@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Activity,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Id } from "@/../convex/_generated/dataModel";
 
 // Hooks
@@ -19,26 +12,33 @@ import {
   useCategories,
   useMediaFolders,
 } from "@/hooks";
-import { blobUrlToDataUrl } from "@/hooks/useMediaFolders";
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
+import { usePersistedUIState } from "@/hooks/usePersistedUIState";
+import { useShowVideoSync } from "@/hooks/useShowVideoSync";
+import { useOutputBroadcast } from "@/hooks/useOutputBroadcast";
+import { usePresentMediaFlow } from "@/hooks/usePresentMediaFlow";
 
-// Types
-import type { ViewMode, BottomTab } from "@/types";
+// Lib
+import {
+  getSlidesForGrid,
+  getActiveSlideText,
+  getSlideGroups,
+} from "@/lib/present/selectors";
 
 // UI Components
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
-} from "@/components/ui";
-import { Kbd } from "@/components/ui/kbd";
+} from "@/components";
 
 // Features
 import { AppHeader } from "@/features/header";
-import { ServicesSidebar } from "@/features/services";
-import { SlidesGrid, OutputPreview } from "@/features/slides";
-import { LyricsEditor } from "@/features/editor";
-import { ShowsPanel, type ShowsPanelRef } from "@/features/shows";
-import { MediaPanel, type MediaPanelRef } from "@/features/media";
+import { type ShowsPanelRef } from "@/features/shows";
+import { type MediaPanelRef } from "@/features/media";
+import { PresentCenterArea } from "@/features/present/PresentCenterArea";
+import { PresentServicesSidebar } from "@/features/present/PresentServicesSidebar";
+import { PresentOutputSidebar } from "@/features/present/PresentOutputSidebar";
 
 export default function Home() {
   // Organization & auth
@@ -110,207 +110,102 @@ export default function Home() {
   // Output visibility toggles
   const [showTextInOutput, setShowTextInOutput] = useState(true);
   const [showMediaInOutput, setShowMediaInOutput] = useState(true);
-
-  // Preview media - shown in Show view but NOT output (for service items only)
-  // activeMediaItem = what's actually output to the projector (backgrounds from media panel)
-  const [previewMediaItem, setPreviewMediaItem] =
-    useState<typeof activeMediaItem>(null);
-
-  // The media shown in Show view: ONLY previewMediaItem (service items)
-  // Media panel items (activeMediaItem) are backgrounds and don't show in Show view
-  const showViewMedia = previewMediaItem;
-
-  // Video playback state - controlled from Show view, synced to output
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
-  // Flag to auto-play after media changes
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
 
-  // Ref for Show view video element
-  const showVideoRef = useRef<HTMLVideoElement>(null);
-  // Ref to prevent feedback loop between state and video events
-  const isProgrammaticPlayRef = useRef(false);
+  const {
+    previewMediaItem,
+    showViewMedia,
+    onSelectServiceItem: handleSelectServiceItem,
+    onDoubleClickServiceItem: handleDoubleClickServiceItem,
+    onOutputPreviewMedia: handleOutputPreviewMedia,
+    onMediaPanelSelect: handleMediaPanelSelect,
+  } = usePresentMediaFlow({
+    serviceItems,
+    allMediaItems,
+    activeMediaItem,
+    setServiceItemIndex,
+    setSelectedSongId,
+    selectMediaForOutput,
+    selectSlide,
+    setShouldAutoPlay,
+  });
+
+  const {
+    showVideoRef,
+    isVideoPlaying,
+    videoCurrentTime,
+    handleVideoPlay,
+    handleVideoPause,
+    handleVideoEnded,
+    handleVideoSeeked,
+  } = useShowVideoSync({
+    showViewMedia,
+    activeMediaItem,
+    videoSettings,
+    shouldAutoPlay,
+    onAutoPlayConsumed: () => setShouldAutoPlay(false),
+  });
 
   // Panel Refs for shortcuts
   const showsPanelRef = useRef<ShowsPanelRef>(null);
   const mediaPanelRef = useRef<MediaPanelRef>(null);
 
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K: Shows
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setBottomTab("shows");
-        requestAnimationFrame(() => {
-          showsPanelRef.current?.focusSearch();
-        });
-      }
-      // Cmd+M: Media
-      if ((e.metaKey || e.ctrlKey) && e.key === "m") {
-        e.preventDefault();
-        setBottomTab("media");
-        requestAnimationFrame(() => {
-          mediaPanelRef.current?.focusSearch();
-        });
-      }
-      // Cmd+B: Scripture (Bible)
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault();
-        setBottomTab("scripture");
-      }
-    };
-
-    window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
-
-  // Reset video state and handle auto-play when OUTPUT media changes
-  const prevMediaIdRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const currentId = activeMediaItem?.id;
-    if (currentId !== prevMediaIdRef.current) {
-      // Reset time when switching media
-      setVideoCurrentTime(0);
-
-      // Check if we should auto-play
-      if (shouldAutoPlay && activeMediaItem?.type === "video") {
-        setIsVideoPlaying(true);
-        setShouldAutoPlay(false);
-      } else if (prevMediaIdRef.current !== undefined) {
-        // Only reset playing state if switching, not on first load
-        setIsVideoPlaying(false);
-      }
-
-      prevMediaIdRef.current = currentId;
-    }
-  }, [activeMediaItem?.id, activeMediaItem?.type, shouldAutoPlay]);
-
-  // Sync Show view video playback with isVideoPlaying state
-  useEffect(() => {
-    if (showVideoRef.current && showViewMedia?.type === "video") {
-      isProgrammaticPlayRef.current = true;
-      if (isVideoPlaying) {
-        showVideoRef.current.play().catch(() => {
-          // Autoplay might be blocked
-          isProgrammaticPlayRef.current = false;
-        });
-      } else {
-        showVideoRef.current.pause();
-      }
-      // Reset flag after a short delay to allow event to fire
-      setTimeout(() => {
-        isProgrammaticPlayRef.current = false;
-      }, 100);
-    }
-  }, [isVideoPlaying, showViewMedia?.type]);
-
-  // Handle video play/pause from user clicking video controls
-  const handleVideoPlay = useCallback(() => {
-    if (!isProgrammaticPlayRef.current) {
-      setIsVideoPlaying(true);
-    }
-  }, []);
-
-  const handleVideoPause = useCallback(() => {
-    if (!isProgrammaticPlayRef.current) {
-      setIsVideoPlaying(false);
-    }
-  }, []);
-
-  const handleVideoEnded = useCallback(() => {
-    setIsVideoPlaying(false);
-  }, []);
-
-  // Handle video seek in Show view
-  const handleVideoSeeked = useCallback(
-    (e: React.SyntheticEvent<HTMLVideoElement>) => {
-      setVideoCurrentTime(e.currentTarget.currentTime);
-    },
-    []
-  );
-
   // UI state (defaults match server render)
-  const [viewMode, setViewMode] = useState<ViewMode>("show");
-  const [bottomTab, setBottomTab] = useState<BottomTab>("shows");
+  const { viewMode, setViewMode, bottomTab, setBottomTab } =
+    usePersistedUIState();
+
+  const [scriptureSlides, setScriptureSlides] = useState<string[]>([]);
+
+  // Global Keyboard Shortcuts
+  useGlobalShortcuts({
+    setBottomTab,
+    showsPanelRef,
+    mediaPanelRef,
+  });
+
   const [selected, setSelected] = useState<{
-    songId: Id<"songs">;
+    songId: Id<"songs"> | null;
     index: number;
   } | null>(null);
   const [editScrollToSlide, setEditScrollToSlide] = useState<number | null>(
-    null
+    null,
   );
-  const [isHydrated, setIsHydrated] = useState(false);
 
-  // Restore persisted UI state after hydration
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("present-ui-state");
-      if (stored) {
-        const state = JSON.parse(stored);
-        if (state.viewMode) setViewMode(state.viewMode);
-        if (state.bottomTab) setBottomTab(state.bottomTab);
-      }
-    } catch (e) {
-      console.error("Failed to load UI state:", e);
-    }
-    setIsHydrated(true);
-  }, []);
-
-  // Persist view state (only after hydration to avoid overwriting with defaults)
-  useEffect(() => {
-    if (!isHydrated) return;
-    const state = { viewMode, bottomTab };
-    try {
-      localStorage.setItem("present-ui-state", JSON.stringify(state));
-    } catch (e) {
-      console.error("Failed to persist UI state:", e);
-    }
-  }, [isHydrated, viewMode, bottomTab]);
-
-  // Computed: slides for grid
   const slidesForGrid = useMemo(() => {
-    if (!selectedSong) return [];
-    return selectedSong.slides.map((slide, index) => ({
-      song: selectedSong,
-      slide,
-      index,
-    }));
-  }, [selectedSong]);
-
-  // Computed: active slide text for preview
-  const activeSlideText = useMemo(() => {
-    if (!activeSlideId || !songs.length) return null;
-    const [songId, indexStr] = activeSlideId.split(":");
-    const song = songs.find((s) => s._id === songId);
-    return song?.slides[Number(indexStr)]?.text ?? null;
-  }, [activeSlideId, songs]);
-
-  // Computed: slide groups for output sidebar
-  const slideGroups = useMemo(() => {
-    if (!selectedSong) return [];
-    const groups: { label: string; count: number }[] = [];
-    let currentLabel = "";
-    for (const slide of selectedSong.slides) {
-      const label = slide.label || "Untitled";
-      if (label !== currentLabel) {
-        groups.push({ label, count: 1 });
-        currentLabel = label;
-      } else {
-        const lastGroup = groups[groups.length - 1];
-        if (lastGroup) lastGroup.count++;
-      }
+    if (selectedSong) return getSlidesForGrid(selectedSong);
+    if (scriptureSlides.length > 0) {
+      return scriptureSlides.map((text, i) => ({
+        slide: { text, label: "Scripture" },
+        index: i,
+        song: null as any,
+      }));
     }
-    return groups;
-  }, [selectedSong]);
+    return [];
+  }, [selectedSong, scriptureSlides]);
+  const activeSlideText = useMemo(
+    () => getActiveSlideText(activeSlideId, songs),
+    [activeSlideId, songs],
+  );
+  const slideGroups = useMemo(
+    () => getSlideGroups(selectedSong),
+    [selectedSong],
+  );
 
   // Handlers
   const handleSelectSlide = useCallback(
-    async (songId: Id<"songs">, index: number, text: string) => {
-      setSelected({ songId, index });
-      await selectSlide(`${songId}:${index}`, text);
+    async (slideId: string, text: string) => {
+      await selectSlide(slideId, text);
+
+      const [idPart, indexStr] = slideId.split(":");
+      const index = Number(indexStr);
+
+      if (slideId.startsWith("scripture")) {
+        setSelected({ songId: null, index });
+      } else if (slideId.includes(":")) {
+        setSelected({ songId: idPart as any, index });
+      }
     },
-    [selectSlide]
+    [selectSlide],
   );
 
   const handleEditSlide = useCallback(
@@ -322,83 +217,7 @@ export default function Home() {
       setSelected({ songId, index: slideIndex });
       setEditScrollToSlide(slideIndex);
     },
-    [setSelectedSongId]
-  );
-
-  const handleSelectServiceItem = useCallback(
-    (index: number) => {
-      const item = serviceItems[index];
-      if (!item) return;
-
-      setServiceItemIndex(index);
-
-      if (item.type === "song" && item.song) {
-        setSelectedSongId(item.song._id);
-        // Clear media preview when switching to a song
-        setPreviewMediaItem(null);
-      } else if (item.type === "media") {
-        // Find the media item in allMediaItems by matching the refId
-        const mediaItem = allMediaItems.find((m) => m.id === item.refId);
-        if (mediaItem) {
-          // Only set preview - don't output until clicked in Show view or double-clicked
-          setPreviewMediaItem(mediaItem);
-        }
-        // Clear song selection when switching to media
-        setSelectedSongId(null);
-      }
-    },
-    [serviceItems, setServiceItemIndex, setSelectedSongId, allMediaItems]
-  );
-
-  // Double-click on service item to output immediately
-  const handleDoubleClickServiceItem = useCallback(
-    (index: number) => {
-      const item = serviceItems[index];
-      if (!item) return;
-
-      if (item.type === "media") {
-        const mediaItem = allMediaItems.find((m) => m.id === item.refId);
-        if (mediaItem) {
-          // Auto-play if video (set flag before changing media)
-          if (mediaItem.type === "video") {
-            setShouldAutoPlay(true);
-          }
-          // Set preview to show in Show view AND output it
-          setPreviewMediaItem(mediaItem);
-          selectMediaForOutput(mediaItem);
-          // Clear the text output
-          selectSlide("", "");
-        }
-      }
-    },
-    [serviceItems, allMediaItems, selectMediaForOutput, selectSlide]
-  );
-
-  // Click in Show view to output media (for service items previewing)
-  const handleOutputPreviewMedia = useCallback(() => {
-    if (previewMediaItem) {
-      // Auto-play if video (set flag before changing media)
-      if (previewMediaItem.type === "video") {
-        setShouldAutoPlay(true);
-      }
-      selectMediaForOutput(previewMediaItem);
-      // DON'T clear previewMediaItem - keep it visible in Show view for control
-      // Clear the text output
-      selectSlide("", "");
-    }
-  }, [previewMediaItem, selectMediaForOutput, selectSlide]);
-
-  // Media panel selection - outputs immediately (for backgrounds)
-  const handleMediaPanelSelect = useCallback(
-    (item: typeof activeMediaItem) => {
-      setPreviewMediaItem(null); // Clear any preview
-      // Auto-play if video (set flag before changing media)
-      if (item?.type === "video") {
-        setShouldAutoPlay(true);
-      }
-      selectMediaForOutput(item);
-    },
-    [selectMediaForOutput]
+    [setSelectedSongId],
   );
 
   const handleRemoveFromService = useCallback(
@@ -406,7 +225,7 @@ export default function Home() {
       if (!selectedServiceId) return;
       await removeFromService(selectedServiceId, index);
     },
-    [selectedServiceId, removeFromService]
+    [selectedServiceId, removeFromService],
   );
 
   const handleAddToService = useCallback(
@@ -414,7 +233,7 @@ export default function Home() {
       if (!selectedServiceId) return;
       await addSongToService(selectedServiceId, songId);
     },
-    [selectedServiceId, addSongToService]
+    [selectedServiceId, addSongToService],
   );
 
   const handleAddMediaToService = useCallback(
@@ -422,7 +241,7 @@ export default function Home() {
       if (!selectedServiceId) return;
       await addMediaToService(selectedServiceId, mediaId, mediaName);
     },
-    [selectedServiceId, addMediaToService]
+    [selectedServiceId, addMediaToService],
   );
 
   const handleSaveSong = useCallback(
@@ -430,7 +249,7 @@ export default function Home() {
       if (!selectedSongId) return;
       await updateExistingSong(selectedSongId, title, lyrics);
     },
-    [selectedSongId, updateExistingSong]
+    [selectedSongId, updateExistingSong],
   );
 
   const handleRenameSong = useCallback(
@@ -439,7 +258,21 @@ export default function Home() {
       if (!song) return;
       await updateExistingSong(songId, newTitle, song.lyrics);
     },
-    [songs, updateExistingSong]
+    [songs, updateExistingSong],
+  );
+
+  const handleScriptureOutput = useCallback(
+    async (slides: string[]) => {
+      // Clear current song selection when showing scripture
+      setSelectedSongId(null);
+      setScriptureSlides(slides);
+
+      if (slides.length > 0) {
+        // Use consistent scripture:index format
+        await handleSelectSlide(`scripture:0`, slides[0]);
+      }
+    },
+    [handleSelectSlide, setSelectedSongId],
   );
 
   const fixLyrics = useCallback(async (lyrics: string): Promise<string> => {
@@ -455,55 +288,15 @@ export default function Home() {
     return data.cleanedLyrics ?? lyrics;
   }, []);
 
-  // Broadcast media changes to output window
-  // Convert blob URL to data URL for cross-window communication
-  useEffect(() => {
-    const channel = new BroadcastChannel("present-output");
-    let isCancelled = false;
-
-    async function sendMediaUpdate() {
-      let mediaData = null;
-
-      if (activeMediaItem) {
-        // Convert blob URL to data URL so it works in another window
-        const dataUrl = await blobUrlToDataUrl(activeMediaItem.url);
-        mediaData = {
-          id: activeMediaItem.id,
-          name: activeMediaItem.name,
-          type: activeMediaItem.type,
-          url: dataUrl,
-        };
-      }
-
-      // Only post if the effect hasn't been cleaned up
-      if (!isCancelled) {
-        channel.postMessage({
-          type: "media-update",
-          mediaItem: mediaData,
-          showText: showTextInOutput,
-          showMedia: showMediaInOutput,
-          videoSettings,
-          mediaFilterCSS,
-          isVideoPlaying,
-          videoCurrentTime,
-        });
-      }
-    }
-
-    sendMediaUpdate();
-    return () => {
-      isCancelled = true;
-      channel.close();
-    };
-  }, [
+  useOutputBroadcast({
     activeMediaItem,
-    showTextInOutput,
-    showMediaInOutput,
+    showText: showTextInOutput,
+    showMedia: showMediaInOutput,
     videoSettings,
     mediaFilterCSS,
     isVideoPlaying,
     videoCurrentTime,
-  ]);
+  });
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -521,27 +314,31 @@ export default function Home() {
       }
 
       // Arrow navigation in show mode
-      if (viewMode === "show" && selectedSong && slidesForGrid.length > 0) {
+      if (
+        viewMode === "show" &&
+        (selectedSong || scriptureSlides.length > 0) &&
+        slidesForGrid.length > 0
+      ) {
         const currentIndex = selected?.index ?? 0;
         if (e.key === "ArrowRight" || e.key === "ArrowDown") {
           e.preventDefault();
           const nextIndex = Math.min(
             currentIndex + 1,
-            slidesForGrid.length - 1
+            slidesForGrid.length - 1,
           );
-          handleSelectSlide(
-            selectedSong._id,
-            nextIndex,
-            slidesForGrid[nextIndex].slide.text
-          );
+          const nextSlide = slidesForGrid[nextIndex];
+          const slideId = nextSlide.song
+            ? `${nextSlide.song._id}:${nextSlide.index}`
+            : `scripture:${nextSlide.index}`;
+          handleSelectSlide(slideId, nextSlide.slide.text);
         } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
           e.preventDefault();
           const prevIndex = Math.max(currentIndex - 1, 0);
-          handleSelectSlide(
-            selectedSong._id,
-            prevIndex,
-            slidesForGrid[prevIndex].slide.text
-          );
+          const prevSlide = slidesForGrid[prevIndex];
+          const slideId = prevSlide.song
+            ? `${prevSlide.song._id}:${prevSlide.index}`
+            : `scripture:${prevSlide.index}`;
+          handleSelectSlide(slideId, prevSlide.slide.text);
         }
       }
     };
@@ -566,272 +363,130 @@ export default function Home() {
       <ResizablePanelGroup
         direction="horizontal"
         className="flex-1"
-        autoSaveId="present-main-layout"
+        autoSaveId="present-main-layout-v2"
       >
         {/* Left sidebar - Services (default ~200px on 1400px screen = 14%) */}
-        <ResizablePanel defaultSize={14} minSize={10} maxSize={25}>
-          <div className="h-full border-r border-border bg-card">
-            <ServicesSidebar
-              services={services}
-              selectedServiceId={selectedServiceId}
-              isInsideService={isInsideService}
-              selectedService={selectedService}
-              serviceItems={serviceItems}
-              serviceItemIndex={serviceItemIndex}
-              onEnterService={enterService}
-              onExitService={exitService}
-              onSelectServiceItem={handleSelectServiceItem}
-              onDoubleClickServiceItem={handleDoubleClickServiceItem}
-              onRemoveFromService={handleRemoveFromService}
-              onCreateService={createNewService}
-              onRenameService={renameExistingService}
-              onDeleteService={deleteService}
-              onReorderServiceItems={
-                selectedServiceId
-                  ? (from, to) =>
-                      reorderServiceItems(selectedServiceId, from, to)
-                  : undefined
-              }
-              onReorderServices={reorderServices}
-            />
-          </div>
-        </ResizablePanel>
+        <PresentServicesSidebar
+          servicesSidebarProps={{
+            services,
+            selectedServiceId,
+            isInsideService,
+            selectedService,
+            serviceItems,
+            serviceItemIndex,
+            onEnterService: enterService,
+            onExitService: exitService,
+            onSelectServiceItem: handleSelectServiceItem,
+            onDoubleClickServiceItem: handleDoubleClickServiceItem,
+            onRemoveFromService: handleRemoveFromService,
+            onCreateService: createNewService,
+            onRenameService: renameExistingService,
+            onDeleteService: deleteService,
+            onReorderServiceItems: selectedServiceId
+              ? (from, to) => reorderServiceItems(selectedServiceId, from, to)
+              : undefined,
+            onReorderServices: reorderServices,
+          }}
+        />
 
         <ResizableHandle withHandle />
 
         {/* Center content with vertical split (slides + bottom tabs) */}
-        <ResizablePanel defaultSize={66} minSize={30}>
-          <ResizablePanelGroup
-            direction="vertical"
-            className="h-full"
-            autoSaveId="present-center-layout"
-          >
-            {/* Main slides/editor area */}
-            <ResizablePanel defaultSize={75} minSize={30}>
-              <main className="flex h-full flex-col overflow-hidden bg-background">
-                <div className="relative flex-1 overflow-hidden">
-                  {/* Show mode - SlidesGrid or Media */}
-                  <Activity mode={viewMode === "show" ? "visible" : "hidden"}>
-                    <div className="absolute inset-0 overflow-auto p-4">
-                      {/* Show media if selected and no song, otherwise show slides */}
-                      {showViewMedia && !selectedSongId ? (
-                        <div className="flex h-full flex-col items-center justify-center gap-4">
-                          {/* Click to output - shows indicator based on output state */}
-                          <button
-                            type="button"
-                            onClick={handleOutputPreviewMedia}
-                            className={`relative w-full max-w-4xl aspect-video rounded-lg overflow-hidden bg-black shadow-xl ${
-                              previewMediaItem &&
-                              activeMediaItem?.id === previewMediaItem.id
-                                ? "ring-2 ring-green-500" // Active/outputting
-                                : previewMediaItem
-                                  ? "ring-2 ring-yellow-500 cursor-pointer" // Preview only
-                                  : ""
-                            }`}
-                            disabled={
-                              activeMediaItem?.id === previewMediaItem?.id
-                            }
-                          >
-                            {showViewMedia.type === "image" ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={showViewMedia.url}
-                                alt={showViewMedia.name}
-                                className="h-full w-full object-contain"
-                              />
-                            ) : (
-                              <video
-                                ref={showVideoRef}
-                                src={showViewMedia.url}
-                                className="h-full w-full object-contain"
-                                controls
-                                loop={videoSettings.loop}
-                                muted={videoSettings.muted}
-                                onPlay={handleVideoPlay}
-                                onPause={handleVideoPause}
-                                onEnded={handleVideoEnded}
-                                onSeeked={handleVideoSeeked}
-                              />
-                            )}
-                            {/* Preview indicator - only show when NOT yet outputting */}
-                            {previewMediaItem &&
-                              activeMediaItem?.id !== previewMediaItem.id && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
-                                  <span className="text-white font-medium text-lg">
-                                    Click to Output
-                                  </span>
-                                </div>
-                              )}
-                          </button>
-                          <p className="text-sm text-muted-foreground">
-                            {showViewMedia.name}
-                            {previewMediaItem &&
-                            activeMediaItem?.id === previewMediaItem.id ? (
-                              <span className="ml-2 text-green-500">
-                                (Now Outputting)
-                              </span>
-                            ) : previewMediaItem ? (
-                              <span className="ml-2 text-yellow-500">
-                                (Preview - click to output)
-                              </span>
-                            ) : null}
-                          </p>
-                        </div>
-                      ) : (
-                        <SlidesGrid
-                          slides={slidesForGrid}
-                          activeSlideId={activeSlideId}
-                          selectedIndex={selected?.index ?? null}
-                          onSelectSlide={handleSelectSlide}
-                          onEditSlide={handleEditSlide}
-                        />
-                      )}
-                    </div>
-                  </Activity>
-
-                  {/* Edit mode - LyricsEditor */}
-                  <Activity mode={viewMode === "edit" ? "visible" : "hidden"}>
-                    <div className="absolute inset-0 overflow-auto p-4">
-                      {selectedSong ? (
-                        <LyricsEditor
-                          song={selectedSong}
-                          fontFamily={fontFamily}
-                          fontSize={fontSize}
-                          fontBold={fontBold}
-                          fontItalic={fontItalic}
-                          fontUnderline={fontUnderline}
-                          scrollToSlideIndex={editScrollToSlide}
-                          onSave={handleSaveSong}
-                          onFixLyrics={fixLyrics}
-                          onFontStyleChange={updateFontStyle}
-                          onScrollComplete={() => setEditScrollToSlide(null)}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                          Select a song to edit
-                        </div>
-                      )}
-                    </div>
-                  </Activity>
-
-                  {/* Stage mode - placeholder */}
-                  <Activity mode={viewMode === "stage" ? "visible" : "hidden"}>
-                    <div className="absolute inset-0 flex items-center justify-center overflow-auto p-4 text-sm text-muted-foreground">
-                      Stage display settings coming soon
-                    </div>
-                  </Activity>
-                </div>
-              </main>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle />
-
-            {/* Bottom tabs panel (default ~200px = 25% of remaining height) */}
-            <ResizablePanel defaultSize={25} minSize={15} maxSize={50}>
-              <div className="flex h-full flex-col border-t border-border bg-card">
-                <div className="flex shrink-0 items-center border-b border-border px-2">
-                  {(["shows", "media", "scripture"] as BottomTab[]).map(
-                    (tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setBottomTab(tab)}
-                        className={`flex items-center gap-2 px-4 py-2 text-xs font-medium capitalize transition ${
-                          bottomTab === tab
-                            ? "border-b-2 border-primary text-primary"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {tab}
-                        <Kbd className="ml-2">
-                          ⌘{tab === "shows" ? "K" : tab === "media" ? "M" : "B"}
-                        </Kbd>
-                      </button>
-                    )
-                  )}
-                </div>
-                <div className="relative min-h-0 flex-1 overflow-hidden">
-                  {/* Shows tab */}
-                  <Activity mode={bottomTab === "shows" ? "visible" : "hidden"}>
-                    <div className="absolute inset-0 overflow-auto">
-                      <ShowsPanel
-                        ref={showsPanelRef}
-                        songs={filteredSongs}
-                        categories={categories}
-                        selectedSongId={selectedSongId}
-                        selectedCategoryId={selectedCategoryId}
-                        isInsideService={isInsideService}
-                        selectedServiceId={selectedServiceId}
-                        onSelectSong={setSelectedSongId}
-                        onSelectCategory={setSelectedCategoryId}
-                        onCreateSong={createNewSong}
-                        onRenameSong={handleRenameSong}
-                        onDeleteSong={deleteSong}
-                        onAddToService={handleAddToService}
-                        onCreateCategory={createNewCategory}
-                        onFixLyrics={fixLyrics}
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                      />
-                    </div>
-                  </Activity>
-
-                  {/* Media tab */}
-                  <Activity mode={bottomTab === "media" ? "visible" : "hidden"}>
-                    <div className="absolute inset-0 overflow-hidden">
-                      <MediaPanel
-                        ref={mediaPanelRef}
-                        mediaState={mediaState}
-                        onSelectForOutput={handleMediaPanelSelect}
-                        isInsideService={isInsideService}
-                        selectedServiceId={selectedServiceId}
-                        onAddToService={handleAddMediaToService}
-                        orgId={orgId}
-                      />
-                    </div>
-                  </Activity>
-
-                  {/* Scripture tab */}
-                  <Activity
-                    mode={bottomTab === "scripture" ? "visible" : "hidden"}
-                  >
-                    <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                      Scripture search coming soon
-                    </div>
-                  </Activity>
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+        <ResizablePanel
+          id="center-area"
+          order={2}
+          defaultSize={66}
+          minSize={30}
+        >
+          <PresentCenterArea
+            viewMode={viewMode}
+            bottomTab={bottomTab}
+            setBottomTab={setBottomTab}
+            slidesForGrid={slidesForGrid}
+            activeSlideId={activeSlideId}
+            selectedIndex={selected?.index ?? null}
+            selectedSong={selectedSong}
+            selectedSongId={selectedSongId}
+            onSelectSlide={handleSelectSlide}
+            onEditSlide={handleEditSlide}
+            editorProps={{
+              fontFamily,
+              fontSize,
+              fontBold,
+              fontItalic,
+              fontUnderline,
+              onFontStyleChange: updateFontStyle,
+              onSave: handleSaveSong, // ASYNC — SAME AS BEFORE
+              onFixLyrics: fixLyrics,
+              scrollToSlideIndex: editScrollToSlide,
+              onScrollComplete: () => setEditScrollToSlide(null),
+            }}
+            showViewMedia={showViewMedia}
+            activeMediaItem={activeMediaItem}
+            showVideoRef={showVideoRef}
+            videoSettings={videoSettings}
+            onOutputPreviewMedia={handleOutputPreviewMedia}
+            onVideoPlay={handleVideoPlay}
+            onVideoPause={handleVideoPause}
+            onVideoEnded={handleVideoEnded}
+            onVideoSeeked={handleVideoSeeked}
+            showsPanelRef={showsPanelRef}
+            mediaPanelRef={mediaPanelRef}
+            showsPanelProps={{
+              songs: filteredSongs,
+              categories,
+              selectedSongId,
+              selectedCategoryId,
+              isInsideService,
+              selectedServiceId,
+              onSelectSong: setSelectedSongId,
+              onSelectCategory: setSelectedCategoryId,
+              onCreateSong: createNewSong,
+              onRenameSong: handleRenameSong,
+              onDeleteSong: deleteSong,
+              onAddToService: handleAddToService,
+              onCreateCategory: createNewCategory,
+              onFixLyrics: fixLyrics,
+              searchQuery,
+              onSearchChange: setSearchQuery,
+            }}
+            mediaPanelProps={{
+              mediaState,
+              onSelectForOutput: handleMediaPanelSelect,
+              isInsideService,
+              selectedServiceId,
+              onAddToService: handleAddMediaToService,
+              orgId,
+            }}
+            onSendScripture={handleScriptureOutput}
+          />
         </ResizablePanel>
 
         <ResizableHandle withHandle />
 
         {/* Right sidebar - Output Preview + Groups (default ~280px on 1400px screen = 20%) */}
-        <ResizablePanel defaultSize={20} minSize={12} maxSize={35}>
-          <div className="h-full border-l border-border bg-card">
-            <OutputPreview
-              text={activeSlideText}
-              fontBold={fontBold}
-              fontItalic={fontItalic}
-              fontUnderline={fontUnderline}
-              groups={slideGroups}
-              activeMediaItem={activeMediaItem}
-              videoSettings={videoSettings}
-              onVideoSettingsChange={updateVideoSettings}
-              showText={showTextInOutput}
-              showMedia={showMediaInOutput}
-              onToggleText={() => setShowTextInOutput(!showTextInOutput)}
-              onToggleMedia={() => setShowMediaInOutput(!showMediaInOutput)}
-              onClearMedia={() => selectMediaForOutput(null)}
-              mediaFilters={mediaFilters}
-              onMediaFiltersChange={updateMediaFilters}
-              onResetFilters={resetMediaFilters}
-              isVideoPlaying={isVideoPlaying}
-              videoCurrentTime={videoCurrentTime}
-            />
-          </div>
-        </ResizablePanel>
+        <PresentOutputSidebar
+          outputPreviewProps={{
+            text: activeSlideText,
+            fontBold,
+            fontItalic,
+            fontUnderline,
+            groups: slideGroups,
+            activeMediaItem,
+            videoSettings,
+            onVideoSettingsChange: updateVideoSettings,
+            showText: showTextInOutput,
+            showMedia: showMediaInOutput,
+            onToggleText: () => setShowTextInOutput(!showTextInOutput),
+            onToggleMedia: () => setShowMediaInOutput(!showMediaInOutput),
+            onClearMedia: () => selectMediaForOutput(null),
+            mediaFilters,
+            onMediaFiltersChange: updateMediaFilters,
+            onResetFilters: resetMediaFilters,
+            isVideoPlaying,
+            videoCurrentTime,
+          }}
+        />
       </ResizablePanelGroup>
     </div>
   );

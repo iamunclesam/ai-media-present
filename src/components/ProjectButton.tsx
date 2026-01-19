@@ -4,10 +4,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Monitor, MonitorOff, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ============================================================================
-// TypeScript interfaces for the experimental Window Management API
-// ============================================================================
-
 interface ScreenDetailed {
   availHeight: number;
   availLeft: number;
@@ -248,7 +244,7 @@ export function ProjectButton({ className }: ProjectButtonProps) {
           "group relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200",
           isLive
             ? "bg-green-600 text-white shadow-lg shadow-green-500/25 hover:bg-green-500"
-            : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:from-indigo-500 hover:to-purple-500",
+            : "linear-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:from-indigo-500 hover:to-purple-500",
           isLoading && "cursor-wait opacity-70",
           className
         )}

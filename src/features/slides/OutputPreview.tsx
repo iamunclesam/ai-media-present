@@ -2,7 +2,7 @@
 
 import { memo, useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { AutoFitText } from "@/components/ui/AutoFitText";
+import { AutoFitText } from "@/components/AutoFitText";
 import { stripBracketsForDisplay } from "@/lib/lyrics";
 import {
   Type,

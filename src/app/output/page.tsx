@@ -6,7 +6,7 @@ import { useQuery } from "convex/react";
 import type { Id } from "@/../convex/_generated/dataModel";
 import { api } from "@/../convex/_generated/api";
 import { cn } from "@/lib/utils";
-import { AutoFitText } from "@/components/ui/AutoFitText";
+import { AutoFitText } from "@/components/AutoFitText";
 import { stripBracketsForDisplay } from "@/lib/lyrics";
 import { X } from "lucide-react";
 
