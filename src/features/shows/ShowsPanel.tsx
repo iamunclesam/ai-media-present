@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { Id } from "@/../convex/_generated/dataModel";
 import type { Song, Category } from "@/types";
-import { Dialog } from "@/components/Dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Search, ArrowUpDown, Check, ArrowUp, ArrowDown } from "lucide-react";

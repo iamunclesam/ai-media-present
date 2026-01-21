@@ -3,7 +3,7 @@
 import { useState, memo } from "react";
 import type { Id } from "@/../convex/_generated/dataModel";
 import type { Service, Song } from "@/types";
-import { Dialog } from "@/components/Dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 interface ServiceItem {

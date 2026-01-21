@@ -1,4 +1,4 @@
-export { Dialog } from "./Dialog";
+export { Dialog } from "./ui/dialog";
 export { AuthControls } from "./AuthControls";
 export { AutoFitText } from "./AutoFitText";
 export { ProjectButton } from "./ProjectButton";
