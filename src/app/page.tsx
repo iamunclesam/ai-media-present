@@ -46,6 +46,7 @@ import { type ScripturePanelRef } from "@/features/scripture";
 import { PresentCenterArea } from "@/features/present/PresentCenterArea";
 import { PresentServicesSidebar } from "@/features/present/PresentServicesSidebar";
 import { PresentOutputSidebar } from "@/features/present/PresentOutputSidebar";
+import HeroSection from "@/components/HeroSection";
 
 export default function Home() {
   // Organization & auth
@@ -441,6 +442,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
+  <HeroSection />
       {/* Header - Fixed, not resizable */}
       <AppHeader viewMode={viewMode} onViewModeChange={setViewMode} />
 

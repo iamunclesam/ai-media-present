@@ -1,0 +1,40 @@
+.hero-section {
+  position: relative;
+  height: 100vh;
+  background-image: url('/Users/user1/.gemini/antigravity/brain/ffb5ff5c-ea9e-4fd9-b8d0-c8092c80fcf3/hero_background_1778517442814.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Optional dark overlay for readability */
+.hero-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative; /* to be above overlay */
+  z-index: 1;
+  max-width: 80%;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 8vw, 4rem);
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  font-size: clamp(1rem, 4vw, 1.5rem);
+  opacity: 0.9;
+}

@@ -10,14 +10,16 @@ import {
   useRef,
   useImperativeHandle,
 } from "react";
-import { 
-  ResizablePanelGroup, 
-  ResizablePanel, 
-  ResizableHandle 
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle
 } from "@/components/ui/resizable";
 import { ScriptureDownloader } from "./ScriptureDownloader";
 import { ScriptureInput } from "./ScriptureInput";
 import { ScriptureResults } from "./ScriptureResults";
+import { ScriptureListener } from "./ScriptureListener";
+import { findTopicReference } from "../lib/topic-map";
 import { parseReference, type ParsedReference } from "../lib/parser";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
@@ -185,6 +187,64 @@ export const ScripturePanel = memo(
                 </h2>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                  <ScriptureListener
+                    onTranscript={(text) => {
+                      console.log("🎤 Audio Transcript:", text);
+
+                      // 1. Topic/Story Detection (Contextual)
+                      const topicRef = findTopicReference(text);
+                      if (topicRef) {
+                        console.log("🧠 Detected Topic:", topicRef);
+                        if (inputRef.current) {
+                          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                          nativeInputValueSetter?.call(inputRef.current, topicRef);
+                          inputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+
+                          // Auto-trigger search for topics as they are high confidence
+                          handleEnter(topicRef);
+                        }
+                        return;
+                      }
+
+                      // 2. Direct Reference Detection (Regex)
+                      // Matches: "1 John 3:16", "John 3 16", "Genesis 1", "2 Kings 5:10-12"
+                      // Also handles "chapter" and "verse" words: "John chapter 3 verse 16"
+                      // Handles "First", "Second", "Third" prefixes
+                      // Handles "to" or "through" for ranges: "John 3 16 to 20"
+                      const referenceRegex = /\b((?:(?:\d|First|Second|Third|1st|2nd|3rd)\s*)?[a-zA-Z]+)(?:\s+(?:chapter\s+)?)(\d+)(?:[:\s](?:verse\s+)?(\d+)(?:[-–\s]+(?:to|through)?\s*(\d+))?)?\b/i;
+                      const match = text.match(referenceRegex);
+
+                      if (match) {
+                        let extractedRef = match[0];
+
+                        // Normalize word prefixes to numbers
+                        extractedRef = extractedRef
+                          .replace(/^First\s/i, "1 ")
+                          .replace(/^Second\s/i, "2 ")
+                          .replace(/^Third\s/i, "3 ")
+                          .replace(/^1st\s/i, "1 ")
+                          .replace(/^2nd\s/i, "2 ")
+                          .replace(/^3rd\s/i, "3 ");
+
+                        // Normalize "to" / "through" to hyphen
+                        extractedRef = extractedRef.replace(/\s+(?:to|through)\s+/gi, "-");
+
+                        console.log("📖 Detected Reference:", extractedRef);
+
+                        // Update input
+                        if (inputRef.current) {
+                          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+                          nativeInputValueSetter?.call(inputRef.current, extractedRef);
+                          inputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+
+                          // Optionally auto-submit if confident?
+                          // For now just filling it is safer.
+                        }
+                      } else {
+                        console.log("❌ No scripture reference detected in audio.");
+                      }
+                    }}
+                  />
                   {availableVersions.map((v) => (
                     <button
                       key={v.id}
@@ -225,7 +285,7 @@ export const ScripturePanel = memo(
                 onAddToService={
                   selectedServiceId
                     ? (ref, text) =>
-                        addScriptureToService(selectedServiceId, ref, text)
+                      addScriptureToService(selectedServiceId, ref, text)
                     : undefined
                 }
               />

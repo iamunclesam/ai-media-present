@@ -59,11 +59,11 @@ export function useScripture() {
     if (!ref.book || !ref.chapter || ref.errors.length > 0) return [];
 
     // Find the actual version ID by matching the code (e.g. "NKJV") or fallback to first version
-    let targetVersion = versions?.find(v => 
-      v.code.toLowerCase() === ref.versionCode?.toLowerCase() || 
+    let targetVersion = versions?.find(v =>
+      v.code.toLowerCase() === ref.versionCode?.toLowerCase() ||
       v.id.toLowerCase() === ref.versionCode?.toLowerCase()
     );
-    
+
     if (!targetVersion && versions && versions.length > 0) {
       // If version code was specified but not found, don't fallback yet to avoid confusion?
       // Actually, if they type "NKJV", and we don't have it, we should probably warn or just show nothing.
@@ -76,7 +76,7 @@ export function useScripture() {
 
     if (!targetVersion) return [];
     const versionId = targetVersion.id;
-    
+
     let query = db.verses
       .where("[version+bookId+chapter]")
       .equals([versionId, ref.book.id, ref.chapter]);
@@ -94,6 +94,25 @@ export function useScripture() {
     return results.sort((a, b) => a.verse - b.verse);
   }, [versions]);
 
+  const searchVerses = useCallback(async (query: string): Promise<BibleVerse[]> => {
+    if (!query || query.length < 3) return [];
+
+    // Simple text search - in real app might want FTS or optimize this
+    // We'll search in the currently selected or default version
+    // For now, let's just search the default/first version to scan
+    const version = versions?.[0]; // Ideally pass selected version
+    if (!version) return [];
+
+    const results = await db.verses
+      .where("version")
+      .equals(version.id)
+      .filter(v => v.text.toLowerCase().includes(query.toLowerCase()))
+      .limit(5)
+      .toArray();
+
+    return results;
+  }, [versions]);
+
   return {
     versions: versions || [],
     activeImport,
@@ -101,5 +120,6 @@ export function useScripture() {
     importFile,
     uninstallVersion,
     lookupRef,
+    searchVerses,
   };
 }
